@@ -1,0 +1,6 @@
+tags
+*.json
+*.pdf
+*.bc
+*.o
+__pycache__/
