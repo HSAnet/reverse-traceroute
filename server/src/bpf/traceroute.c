@@ -1,9 +1,8 @@
-#include "csum.h"
 #include "probe.h"
 #include "proto.h"
 #include "response.h"
 #include "session.h"
-#include "swap_addr.h"
+#include "logging.h"
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 #include <linux/bpf.h>
@@ -38,8 +37,6 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth, struct iph
     probe_args.proto = tr->request.proto ?: IPPROTO_ICMP;
     probe_args.probe.flow = tr->request.flow;
     probe_args.probe.identifier = (*icmp)->un.echo.id;
-
-    bpf_printk("Probe request: ID: %d\n", probe_args.probe.identifier);
 
     if ((err = probe_create(cursor, &probe_args, eth, ip)) < 0)
         return TC_ACT_SHOT;
@@ -132,14 +129,12 @@ static int handle(struct cursor *cursor)
         goto no_match;
     session.identifier = ret;
 
-    bpf_printk("Probe response: Identifier %d\n", session.identifier);
 
     state = session_find(&session);
     if (!state)
-    {
-        bpf_printk("Session not found.\n");
         goto no_match;
-    }
+
+    log_message(SESSION_PROBE_ANSWERED, &session);
 
     struct response_args args = {
         .session = &session,

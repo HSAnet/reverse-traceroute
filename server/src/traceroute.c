@@ -1,4 +1,5 @@
 #include "traceroute.skel.h"
+#include "messages.h"
 #include <bpf/libbpf.h>
 #include <getopt.h>
 #include <linux/types.h>
@@ -7,6 +8,7 @@
 #include <stdlib.h>
 #include <sys/resource.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
 struct args
 {
@@ -117,7 +119,40 @@ static int traceroute_init(struct traceroute **tr, struct args *args)
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
-    return level != LIBBPF_INFO ? vfprintf(stderr, format, args) : 0;
+    return vfprintf(stderr, format, args);
+}
+
+static int log_message(void *ctx, void *data, size_t size)
+{
+    char address[INET_ADDRSTRLEN];
+    struct message *msg = data;
+
+    const char *result = inet_ntop(AF_INET, &msg->data.address, address, sizeof(address));
+    if (!result)
+        return 0;
+
+    printf("[%*s, %5u]\t", INET_ADDRSTRLEN, result, msg->data.probe_id);
+    switch (msg->type) {
+    case SESSION_CREATED:
+        printf("session created.\n"); break;
+    case SESSION_DELETED:
+        printf("session deleted.\n"); break;
+    case SESSION_TIMEOUT:
+        printf("session timed out.\n"); break;
+    case SESSION_BUFFER_FULL:
+        printf("session buffer full.\n"); break;
+    case SESSION_PROBE_ANSWERED:
+        printf("probe answer received.\n"); break;
+    }
+
+    return 0;
+}
+
+static volatile bool exiting = false;
+
+static void sig_handler(int signum)
+{
+    exiting = true;
 }
 
 int main(int argc, char **argv)
@@ -125,7 +160,7 @@ int main(int argc, char **argv)
     int ret;
     struct args args;
     struct traceroute *tr;
-    sigset_t set;
+    struct ring_buffer *log_buf;
 
     if (parse_args(argc, argv, &args) < 0)
         return -1;
@@ -134,11 +169,11 @@ int main(int argc, char **argv)
     /* Set up libbpf errors and debug info callback */
     libbpf_set_print(libbpf_print_fn);
 
-    if (traceroute_init(&tr, &args) < 0)
+    if ((ret = traceroute_init(&tr, &args)) < 0)
     {
         if (tr)
             traceroute__destroy(tr);
-        return -1;
+        goto exit;
     }
 
     DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .ifindex = args.ifindex, .attach_point = BPF_TC_INGRESS);
@@ -149,13 +184,30 @@ int main(int argc, char **argv)
     if (bpf_tc_attach(&hook, &opts) < 0)
         goto destroy;
 
-    sigemptyset(&set);
-    sigaddset(&set, SIGINT);
-    sigprocmask(SIG_BLOCK, &set, NULL);
+    log_buf = ring_buffer__new(bpf_map__fd(tr->maps.log_buf), log_message, NULL, NULL);
+    if (!log_buf) {
+        fprintf(stderr, "Failed to create logging buffer.\n");
+        goto detach;
+    }
 
-    while (sigwait(&set, &ret))
-        ;
+    signal(SIGINT, sig_handler);
+    signal(SIGTERM, sig_handler);
 
+    while (!exiting) {
+        ret = ring_buffer__poll(log_buf, 100);
+        if (ret == -EINTR) {
+            ret = 0;
+            break;
+        }
+        else if (ret < 0) {
+            fprintf(stderr, "Failed to poll the logging buffer.\n");
+            break;
+        }
+    }
+
+
+    ring_buffer__free(log_buf);
+detach:
     opts.flags = opts.prog_fd = opts.prog_id = 0;
     bpf_tc_detach(&hook, &opts);
 destroy:
@@ -163,5 +215,5 @@ destroy:
     bpf_tc_hook_destroy(&hook);
 exit:
     traceroute__destroy(tr);
-    return 0;
+    return ret;
 }

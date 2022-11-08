@@ -63,7 +63,7 @@ class DiamondMiner:
             if unresp_counter >= abs(self.retry):
                 break
 
-            if not ans and self.retry < 0:
+            if ans and self.retry < 0:
                 unresp_counter = 0
             else:
                 unresp_counter += 1
@@ -112,7 +112,6 @@ class DiamondMiner:
                 continue
 
             joint_vertex = TracerouteVertex(group[0].address)
-            print(f"Merging {group[0].address}")
 
             for vertex in group:
                 for v in vertex.predecessors.copy():

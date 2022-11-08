@@ -1,4 +1,5 @@
 #include "session.h"
+#include "logging.h"
 #include "../config.h"
 #include <bpf/bpf_helpers.h>
 #include <linux/bpf.h>
@@ -26,7 +27,7 @@ struct
 
 static int session_timeout_callback(void *map, struct session_key *key, struct __session_state *state)
 {
-    bpf_printk("Timeout.");
+    log_message(SESSION_TIMEOUT, key);
     session_delete(key);
     return 0;
 }
@@ -38,7 +39,7 @@ static struct __session_state *__session_find(struct session_key *key)
 
 INTERNAL int session_delete(struct session_key *session)
 {
-    bpf_printk("Removed session.");
+    log_message(SESSION_DELETED, session);
     return bpf_map_delete_elem(&map_sessions, session);
 }
 
@@ -57,10 +58,7 @@ INTERNAL int session_add(struct session_key *session, struct session_state *stat
 
     state_ptr = __session_find(session);
     if (state_ptr)
-    {
-        bpf_printk("Session already exists. Skipping.\n");
         return -1;
-    }
 
     if (bpf_map_update_elem(&map_sessions, session, &__state, BPF_NOEXIST) == -1)
         return -1;
@@ -68,7 +66,7 @@ INTERNAL int session_add(struct session_key *session, struct session_state *stat
     state_ptr = __session_find(session);
     if (!state_ptr)
     {
-        bpf_printk("Session buffer full.\n");
+        log_message(SESSION_BUFFER_FULL, session);
         return -1;
     }
 
@@ -79,6 +77,6 @@ INTERNAL int session_add(struct session_key *session, struct session_state *stat
     if (bpf_timer_start(&state_ptr->timer, TIMEOUT_NS, 0) == -1)
         return -1;
 
-    bpf_printk("Added session.\n");
+    log_message(SESSION_CREATED, session);
     return 0;
 }
