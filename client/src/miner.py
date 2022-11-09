@@ -14,10 +14,10 @@ class DiamondMiner:
         self.inter = inter
         assert self.inter >= 0
         self.timeout = timeout
-        assert self.timeout >= 0
+        assert self.timeout > 0
         self.retry = retry
         self.abort = abort
-        assert self.abort >= 0
+        assert self.abort >= 2
 
     def _next_flow(self):
         """Generates a pseudo-random uniform flow identifier in the range
@@ -71,22 +71,17 @@ class DiamondMiner:
     def _probe_and_update(self, hop, next_hop, flows):
         """Sends probes with a given ttl and flows and updates the vertices
         with relevant information, such as rtt and responding flows."""
-        if len(hop) > 1:
-            self._send_probes_to_hop(hop, flows - hop.flows)
+        if len(hop) == 1:
+            hop.first().flow_set.update(flows)
+
+        self._send_probes_to_hop(hop, flows - hop.flows)
         self._send_probes_to_hop(next_hop, flows)
 
-        # We can connect the vertices forward if a single vertex
-        # is present at the current hop.
-        # Backwards is not possible because the vertex discovery may not yet be completed.
-        if len(hop) == 1:
-            vertex = hop.first()
+        for vertex in hop:
             for next_vertex in next_hop:
-                vertex.add_successor(next_vertex)
-        else:
-            for vertex in hop:
-                for next_vertex in next_hop:
-                    if vertex.flow_set & next_vertex.flow_set:
-                        vertex.add_successor(next_vertex)
+                if vertex.flow_set & next_vertex.flow_set:
+                    vertex.add_successor(next_vertex)
+
 
     def _nprobes(self, alpha, hop):
         """Computes the number of flows needed for the next hop depending
@@ -105,7 +100,7 @@ class DiamondMiner:
     def _merge_vertices(self, root):
         """Merges duplicate vertices encountered in a trace.
         Duplicates vertices can occur in the presence of Unequal Multipath-Load Balancing."""
-        buckets = [list(g) for _, g in groupby(sorted(root.flatten(), key=hash))]
+        buckets = [list(g) for k, g in groupby(sorted(root.flatten(), key=hash))]
 
         for group in buckets:
             if len(group) < 2:
@@ -116,10 +111,12 @@ class DiamondMiner:
             for vertex in group:
                 for v in vertex.predecessors.copy():
                     vertex.del_predecessor(v)
-                    joint_vertex.add_predecessor(v)
+                    if v != vertex:
+                        joint_vertex.add_predecessor(v)
                 for v in vertex.successors.copy():
                     vertex.del_successor(v)
-                    joint_vertex.add_successor(v)
+                    if v != vertex:
+                        joint_vertex.add_successor(v)
 
                 for flow, rtt in zip(vertex.flow_set, vertex.rtt_list):
                     joint_vertex.update(flow, rtt)
@@ -135,7 +132,6 @@ class DiamondMiner:
 
         last_known_vertex = None
 
-        unresponsive = 0
         for ttl in range(min_ttl, max_ttl + 1):
             print(f"Probing TTL {ttl}...")
             next_hop = TracerouteHop(ttl)
@@ -154,41 +150,40 @@ class DiamondMiner:
                 start += len(flows)
                 stop = self._nprobes(alpha, hop)
 
-            if not next_hop:
+            dangling_vertices = [v for v in hop if not v.successors]
+            if dangling_vertices:
                 black_hole = BlackHoleVertex()
                 next_hop.add(black_hole)
-                # As a black hole does not contain a set of flow identifiers,
-                # no connections could be made. Thus we manually reconnect
-                # the predecessors to the black hole.
-                for vertex in hop:
-                    vertex.add_successor(black_hole)
+                for v in dangling_vertices:
+                    v.add_successor(black_hole)
+                    black_hole.flow_set.update(v.flow_set)
 
             if len(next_hop) == 1:
                 next_vertex = next_hop.first()
                 if target and next_vertex.address == target:
                     break
 
-                is_last_vertex = last_known_vertex and last_known_vertex == next_vertex
-                is_black_hole = isinstance(next_vertex, BlackHoleVertex)
+                if next_vertex == last_known_vertex:
+                    black_hole = BlackHoleVertex()
+                    for v in next_vertex.predecessors:
+                        next_vertex.del_predecessor(v)
+                        black_hole.add_predecessor(v)
 
-                if is_last_vertex or is_black_hole:
-                    unresponsive += 1
-                else:
-                    unresponsive = 0
+                    next_hop.clear()
+                    next_hop.add(black_hole)
+                        
+                    last_vertex = last_vertices.pop(0)
 
-                if not (is_last_vertex or is_black_hole):
-                    last_known_vertex = next_vertex
+                    if not set(last_vertices) - {BlackHoleVertex(), last_vertex}:
+                        if not isinstance(last_vertex, BlackHoleVertex):
+                            for v in last_vertex.successors.copy():
+                                last_vertex.del_successor(v)
+                        break
+                last_vertices.append(next_vertex)
             else:
-                last_known_vertex = None
-                unresponsive = 0
+                last_vertices = []
 
-            if unresponsive >= self.abort:
-                break
             hop = next_hop
-
-        if last_known_vertex is not None:
-            for v in last_known_vertex.predecessors.copy():
-                last_known_vertex.del_predecessor(v)
 
         self._merge_vertices(root)
         return root

@@ -27,10 +27,10 @@ def create_graph(root):
         label = f"{node.address}\n{node.rtt:.2f}"
         if node.data.hostname:
             label = f"{node.data.hostname}\n" + label
-        graph.node(str(hash(node)), label=label)
+        graph.node(str(id(node)), label=label)
     for node in nodes:
         for next_node in node.successors:
             print(f"{node.address} -> {next_node.address}")
-            graph.edge(str(hash(node)), str(hash(next_node)))
+            graph.edge(str(id(node)), str(id(next_node)))
 
     return graph

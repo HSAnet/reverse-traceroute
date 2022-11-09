@@ -126,14 +126,11 @@ class BlackHoleVertex(TracerouteVertex):
     def __init__(self):
         super().__init__("***")
 
-    # Two black holes are never equal to each other.
-    # If they were equal, only a single black hole could
-    # be kept in a set or dictionary, which is unrealistic.
-    def __hash__(self):
-        return id(self)
-
     def __eq__(self, other):
         return False
+
+    def __hash__(self):
+        return id(self)
 
 
 class TracerouteHop(HashSet):
