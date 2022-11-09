@@ -1,6 +1,8 @@
 #ifndef MESSAGES_H
 #define MESSAGES_H
 
+#include <linux/types.h>
+
 enum message_type {
     SESSION_CREATED,
     SESSION_DELETED,
