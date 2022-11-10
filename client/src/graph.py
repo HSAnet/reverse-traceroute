@@ -1,33 +1,42 @@
-from itertools import product
 import graphviz
+from itertools import groupby
+from .container import TracerouteVertex
 
-def create_graph(root):
-    def resolve(address):
-        import socket
-        try:
-            return True, socket.gethostbyaddr(address)[0]
-        except:
-            return False, None
+def _merge_vertices(root):
+    """Merges duplicate vertices encountered in a trace.
+    Duplicates vertices can occur in the presence of Unequal Multipath-Load Balancing."""
+    buckets = [list(g) for k, g in groupby(sorted(root.flatten(), key=hash))]
 
+    for group in buckets:
+        if len(group) < 2:
+            continue
+
+        joint_vertex = TracerouteVertex(group[0].address)
+
+        for vertex in group:
+            for v in vertex.predecessors.copy():
+                vertex.del_predecessor(v)
+                if v != vertex:
+                    joint_vertex.add_predecessor(v)
+            for v in vertex.successors.copy():
+                vertex.del_successor(v)
+                if v != vertex:
+                    joint_vertex.add_successor(v)
+
+            for flow, rtt in zip(vertex.flow_set, vertex.rtt_list):
+                joint_vertex.update(flow, rtt)
+
+
+def create_graph(root, node_str_func):
+    assert callable(node_str_func)
+
+    _merge_vertices(root)
     nodes = list(root.flatten())
-
-    # Perform DNS lookup for IP addresses by concurrently calling
-    # the resolve function.
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor() as resolver:
-        node_addresses = [ node.address for node in nodes ]
-        hostnames = resolver.map(resolve, node_addresses)
-        for node, (valid, hostname) in zip(nodes, hostnames):
-            if valid:
-                node.data.hostname = hostname
 
     graph = graphviz.Digraph(strict=True)
 
     for node in nodes:
-        label = f"{node.address}\n{node.rtt:.2f}"
-        if node.data.hostname:
-            label = f"{node.data.hostname}\n" + label
-        graph.node(str(id(node)), label=label)
+        graph.node(str(id(node)), label=node_str_func(node))
     for node in nodes:
         for next_node in node.successors:
             print(f"{node.address} -> {next_node.address}")

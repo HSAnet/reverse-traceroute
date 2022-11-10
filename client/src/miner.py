@@ -1,5 +1,4 @@
 from scapy.sendrecv import sr
-from itertools import groupby
 import random
 import math
 
@@ -97,31 +96,6 @@ class DiamondMiner:
                 max_probes = result
         return max_probes
 
-    def _merge_vertices(self, root):
-        """Merges duplicate vertices encountered in a trace.
-        Duplicates vertices can occur in the presence of Unequal Multipath-Load Balancing."""
-        buckets = [list(g) for k, g in groupby(sorted(root.flatten(), key=hash))]
-
-        for group in buckets:
-            if len(group) < 2:
-                continue
-
-            joint_vertex = TracerouteVertex(group[0].address)
-
-            for vertex in group:
-                for v in vertex.predecessors.copy():
-                    vertex.del_predecessor(v)
-                    if v != vertex:
-                        joint_vertex.add_predecessor(v)
-                for v in vertex.successors.copy():
-                    vertex.del_successor(v)
-                    if v != vertex:
-                        joint_vertex.add_successor(v)
-
-                for flow, rtt in zip(vertex.flow_set, vertex.rtt_list):
-                    joint_vertex.update(flow, rtt)
-
-
     def discover(self, alpha, first_hop, min_ttl, max_ttl, target=None):
         assert alpha > 0 and alpha < 1
         assert min_ttl > 0 and max_ttl >= min_ttl
@@ -130,6 +104,7 @@ class DiamondMiner:
         addresses = lambda hop: set(v.address for v in hop)
         hop = TracerouteHop(0, [root])
 
+        unresponsive = 0
         last_known_vertex = None
 
         for ttl in range(min_ttl, max_ttl + 1):
@@ -161,31 +136,33 @@ class DiamondMiner:
             if len(next_hop) == 1:
                 next_vertex = next_hop.first()
                 if target and next_vertex.address == target:
+                    last_known_vertex = None
                     break
 
                 if next_vertex == last_known_vertex:
                     black_hole = BlackHoleVertex()
-                    for v in next_vertex.predecessors:
+                    for v in next_vertex.predecessors.copy():
                         next_vertex.del_predecessor(v)
                         black_hole.add_predecessor(v)
 
                     next_hop.clear()
                     next_hop.add(black_hole)
-                        
-                    last_vertex = last_vertices.pop(0)
 
-                    if not set(last_vertices) - {BlackHoleVertex(), last_vertex}:
-                        if not isinstance(last_vertex, BlackHoleVertex):
-                            for v in last_vertex.successors.copy():
-                                last_vertex.del_successor(v)
-                        break
-                last_vertices.append(next_vertex)
+                if isinstance(next_hop.first(), BlackHoleVertex):
+                    unresponsive += 1
+                else:
+                    last_known_vertex = next_hop.first()
+                    unresponsive = 0
             else:
-                last_vertices = []
+                last_known_vertex = None
+
+            if unresponsive >= self.abort:
+                break
 
             hop = next_hop
 
-        self._merge_vertices(root)
+        if last_known_vertex is not None:
+            last_known_vertex.successors.clear()
         return root
 
 

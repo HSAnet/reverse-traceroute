@@ -1,7 +1,5 @@
 from collections.abc import MutableSet, Mapping
-from box import Box
 from itertools import chain
-import json
 
 class HashSet(MutableSet, Mapping):
     """A set, which maps an objects hash to the object itself.
@@ -48,8 +46,6 @@ class TracerouteVertex:
         self.rtt_list = list()
         self.successors = set()
         self.predecessors = set()
-        # Custom user definable data.
-        self.data = Box(default_box=True)
 
     def update(self, flow, rtt):
         """Update the flow identifier and rtt measurements for a vertex."""
@@ -94,13 +90,11 @@ class TracerouteVertex:
 
     def to_dict(self):
         return {
+            "id": id(self),
             "hash": hash(self),
             "address": str(self.address),
-            "flows": list(self.flow_set),
-            "rtts": list(self.rtt_list),
-            "predecessors": list(map(hash, self.predecessors)),
-            "successors": list(map(hash, self.successors)),
-            "data": self.data.to_dict()
+            "rtt": self.rtt,
+            "successors": list(map(id, self.successors)),
         }
 
     @property
@@ -112,6 +106,8 @@ class TracerouteVertex:
     # __eq__ and __hash__ are needed to store instances of TracerouteVertex in sets.
     # A TracerouteVertex is identified only by its address.
     def __eq__(self, other):
+        if not isinstance(other, TracerouteVertex):
+            return False
         return self.address == other.address
 
     def __hash__(self):
