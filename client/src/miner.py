@@ -122,9 +122,13 @@ class DiamondMiner:
                 # Should this not be the case, then possibly due to rate limiting.
                 # In that case it does not make sense to send even more packets,
                 # so we just have to work with the assumption that all probes were answered.
-                start += len(flows)
+                start = stop
                 stop = self._nprobes(alpha, hop)
 
+            # Connect all vertices without successors to a newly created
+            # black hole, which inherits the flows of its predecessors.
+            # Thus we can chain multiple black holes by flow inheritance,
+            # which can be reconnected once a successor vertex with a matching flow is found.
             dangling_vertices = [v for v in hop if not v.successors]
             if dangling_vertices:
                 black_hole = BlackHoleVertex()
@@ -133,27 +137,24 @@ class DiamondMiner:
                     v.add_successor(black_hole)
                     black_hole.flow_set.update(v.flow_set)
 
+            # Check if the abort condition is met.
+            # If multiple successive black holes possibly intermixed with a single vertex
+            # are found, increment the unresponsive counter.
             if len(next_hop) == 1:
                 next_vertex = next_hop.first()
                 if target and next_vertex.address == target:
                     last_known_vertex = None
                     break
 
-                if next_vertex == last_known_vertex:
-                    black_hole = BlackHoleVertex()
-                    for v in next_vertex.predecessors.copy():
-                        next_vertex.del_predecessor(v)
-                        black_hole.add_predecessor(v)
-
-                    next_hop.clear()
-                    next_hop.add(black_hole)
-
-                if isinstance(next_hop.first(), BlackHoleVertex):
+                if isinstance(next_vertex, BlackHoleVertex):
+                    unresponsive += 1
+                elif next_vertex == last_known_vertex:
                     unresponsive += 1
                 else:
-                    last_known_vertex = next_hop.first()
                     unresponsive = 0
+                    last_known_vertex = next_vertex
             else:
+                unresponsive = 0
                 last_known_vertex = None
 
             if unresponsive >= self.abort:
@@ -161,6 +162,8 @@ class DiamondMiner:
 
             hop = next_hop
 
+        # Track back to the last known vertex and disconnect
+        # successive black holes if such a vertex is known.
         if last_known_vertex is not None:
             last_known_vertex.successors.clear()
         return root

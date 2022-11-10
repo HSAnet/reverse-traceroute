@@ -95,7 +95,7 @@ class TracerouteVertex:
         return {
             "id": id(self),
             "hash": hash(self),
-            "address": str(self.address),
+            "address": self.address,
             "rtt": self.rtt,
             "successors": list(map(id, self.successors)),
             "predecessors": list(map(id, self.predecessors)),
