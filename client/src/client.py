@@ -58,10 +58,16 @@ def parse_arguments():
 
     stats_group = parser.add_argument_group()
     stats_group.add_argument(
-        "-s", "--statistics", action="store_true", help="Store statistics as json on the local file system."
+        "-s",
+        "--statistics",
+        action="store_true",
+        help="Store statistics as json on the local file system.",
     )
     stats_group.add_argument(
-        "-t", "--transmit", action="store_true", help="Submit the statistics to HSA-Net as test data."
+        "-t",
+        "--transmit",
+        action="store_true",
+        help="Submit the statistics to HSA-Net as test data.",
     )
 
     direction_group = parser.add_argument_group()
@@ -87,6 +93,7 @@ def parse_arguments():
 def resolve_hostnames(root):
     def resolve(address):
         import socket
+
         try:
             return True, socket.gethostbyaddr(address)[0]
         except:
@@ -97,8 +104,9 @@ def resolve_hostnames(root):
     # Perform DNS lookup for IP addresses by concurrently calling
     # the resolve function.
     from concurrent.futures import ThreadPoolExecutor
+
     with ThreadPoolExecutor() as resolver:
-        node_addresses = [ node.address for node in nodes ]
+        node_addresses = [node.address for node in nodes]
         hostnames = resolver.map(resolve, node_addresses)
         for node, (valid, hostname) in zip(nodes, hostnames):
             if valid:
@@ -157,11 +165,13 @@ def main():
         root = discover(ClassicTraceroute(*trace_args), "127.0.0.1", target)
         hostnames.update(resolve_hostnames(root))
 
-        create_graph(root, node_str).render(args.output + "_fwd", cleanup=True)
         if args.transmit:
             measurement["traces"]["forward"] = [x.to_dict() for x in root.flatten()]
+
+        create_graph(root, node_str).render(args.output + "_fwd", cleanup=True)
     if args.reverse:
         from scapy.sendrecv import sr1
+
         trace = ReverseTraceroute(*trace_args)
 
         # Check for the presence of a reverse traceroute server
@@ -177,28 +187,34 @@ def main():
         except Exception as e:
             print(e)
             exit()
-        
+
         root = discover(ReverseTraceroute(*trace_args), target, None)
         hostnames.update(resolve_hostnames(root))
 
-        create_graph(root, node_str).render(args.output + "_rev", cleanup=True)
         if args.transmit:
             measurement["traces"]["reverse"] = [x.to_dict() for x in root.flatten()]
 
+        create_graph(root, node_str).render(args.output + "_rev", cleanup=True)
 
     if args.transmit:
-        measurement["hostnames"] = { k.address: v for k,v in hostnames.items() }
+        measurement["hostnames"] = {k.address: v for k, v in hostnames.items()}
         print(json.dumps(measurement, indent=4))
 
         choice = input(
-            "Due to the --transmit flag, your data will be uploaded to the HSA-Net group.\n" +
-            "Do you want to proceed [Yes/No]: "
+            "Due to the --transmit flag, your data will be uploaded to the HSA-Net group.\n"
+            + "Do you want to proceed [Yes/No]: "
         )
         if choice.lower() == "yes":
             try:
                 import requests
-                requests.post("http://playground.net.hs-augsburg.de:9999/post_trace", json=measurement)
+
+                requests.post(
+                    "http://playground.net.hs-augsburg.de:9999/post_trace",
+                    json=measurement,
+                )
             except:
                 print("Failed to submit measurement data!")
             else:
-                print("Successfully transmitted your data! Thank you for contributing to our measurement study.")
+                print(
+                    "Successfully transmitted your data! Thank you for contributing to our measurement study."
+                )

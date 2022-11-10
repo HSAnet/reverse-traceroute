@@ -39,23 +39,6 @@ optional = false
 python-versions = ">=3.5"
 
 [[package]]
-name = "python-box"
-version = "6.1.0"
-description = "Advanced Python dictionaries with dot notation access"
-category = "main"
-optional = false
-python-versions = ">=3.7"
-
-[package.extras]
-pyyaml = ["pyyaml"]
-all = ["ruamel.yaml (>=0.17)", "toml", "msgpack"]
-msgpack = ["msgpack"]
-"ruamel.yaml" = ["ruamel.yaml (>=0.17)"]
-toml = ["toml"]
-tomli = ["tomli-w", "tomli"]
-yaml = ["ruamel.yaml (>=0.17)"]
-
-[[package]]
 name = "requests"
 version = "2.28.1"
 description = "Python HTTP for Humans."
@@ -102,14 +85,13 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "2cde32758f6387ab65b9f4e4c63e79badc4c8e04d462725e189d51daab31ec03"
+content-hash = "8a89660a2bb97ce3fa2351201a405b00c93ce2ea53db052071f5fd0c6fcb0980"
 
 [metadata.files]
 certifi = []
 charset-normalizer = []
 graphviz = []
 idna = []
-python-box = []
 requests = []
 scapy = [
     {file = "scapy-2.4.5.tar.gz", hash = "sha256:bc707e3604784496b6665a9e5b2a69c36cc9fb032af4864b29051531b24c8593"},

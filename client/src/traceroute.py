@@ -10,6 +10,7 @@ from ipaddress import IPv4Address
 
 TracerouteResult = namedtuple("TracerouteResult", ["address", "rtt"])
 
+
 class Traceroute:
     def __init__(self, target, protocol):
         self.target = target
@@ -25,6 +26,7 @@ class Traceroute:
 
 class ClassicTraceroute(Traceroute):
     """Implements classic traceroute functionality."""
+
     def __init__(self, target, protocol):
         super().__init__(target, protocol)
 
@@ -77,11 +79,10 @@ class ReverseTraceroute(Traceroute):
             return "The target does not support the specified protocol. Try setting it to 0 to let the target choose a suitable value."
 
     STATUS_TO_EXCEPTION = {
-            1: InvalidTtlException,
-            2: InvalidFlowException,
-            3: InvalidProtocolException,
+        1: InvalidTtlException,
+        2: InvalidFlowException,
+        3: InvalidProtocolException,
     }
-
 
     def __init__(self, target, protocol):
         super().__init__(target, protocol)
@@ -101,7 +102,9 @@ class ReverseTraceroute(Traceroute):
 
                     if status == 0x00:
                         address, rtt = struct.unpack("!II", load[16:24])
-                        return TracerouteResult(str(IPv4Address(address)), rtt / 1000000)
+                        return TracerouteResult(
+                            str(IPv4Address(address)), rtt / 1000000
+                        )
                     else:
                         if status in self.STATUS_TO_EXCEPTION:
                             raise self.STATUS_TO_EXCEPTION[status]

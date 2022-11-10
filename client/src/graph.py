@@ -2,9 +2,11 @@ import graphviz
 from itertools import groupby
 from .container import TracerouteVertex
 
+
 def _merge_vertices(root):
     """Merges duplicate vertices encountered in a trace.
     Duplicates vertices can occur in the presence of Unequal Multipath-Load Balancing."""
+    # TODO: Work on copy so that merge does not affect stored json.
     buckets = [list(g) for k, g in groupby(sorted(root.flatten(), key=hash))]
 
     for group in buckets:

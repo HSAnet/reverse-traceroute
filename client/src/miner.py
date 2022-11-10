@@ -8,6 +8,7 @@ from .stats import probes_for_vertex
 
 class DiamondMiner:
     """A hop-by-hop variation of the existing diamond miner algorithm."""
+
     def __init__(self, traceroute, inter, timeout, retry, abort):
         self.traceroute = traceroute
         self.inter = inter
@@ -46,14 +47,14 @@ class DiamondMiner:
             probes = [self.traceroute.create_probe(ttl, flow) for flow in flow_list]
 
             ans, unans = sr(
-                probes, inter=self.inter, timeout=self.timeout#, verbose=0
+                probes, inter=self.inter, timeout=self.timeout  # , verbose=0
             )
 
             for req, resp in ans:
                 flow = flow_list[probes.index(req)]
                 address, rtt = self.traceroute.parse_probe_response(req, resp)
                 vertex = TracerouteVertex(address)
-        
+
                 if vertex not in hop:
                     hop.add(vertex)
                 hop[vertex].update(flow, rtt)
@@ -81,11 +82,10 @@ class DiamondMiner:
                 if vertex.flow_set & next_vertex.flow_set:
                     vertex.add_successor(next_vertex)
 
-
     def _nprobes(self, alpha, hop):
         """Computes the number of flows needed for the next hop depending
         on the certainty alpha and the current set of vertices."""
-        probes = lambda v: probes_for_vertex(max(1, len(v.successors))+1, alpha)
+        probes = lambda v: probes_for_vertex(max(1, len(v.successors)) + 1, alpha)
 
         total_flows = len(hop.flows)
         max_probes = 0
@@ -164,5 +164,3 @@ class DiamondMiner:
         if last_known_vertex is not None:
             last_known_vertex.successors.clear()
         return root
-
-

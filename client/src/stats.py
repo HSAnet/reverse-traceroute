@@ -3,9 +3,7 @@ import functools
 
 
 def __certainty_to_reach_vertices(n, k):
-    nominator = sum(
-        math.comb(n, i) * i**k * (-1) ** (n - i - 1) for i in range(n)
-    )
+    nominator = sum(math.comb(n, i) * i**k * (-1) ** (n - i - 1) for i in range(n))
     return 1 - nominator / (n**k)
 
 

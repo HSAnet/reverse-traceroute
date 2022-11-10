@@ -1,14 +1,16 @@
 from collections.abc import MutableSet, Mapping
 from itertools import chain
 
+
 class HashSet(MutableSet, Mapping):
     """A set, which maps an objects hash to the object itself.
     This allows for object lookup without unnecessary looping overhead."""
+
     def __init__(self):
         super().__init__()
 
     def __init__(self, collection=[]):
-        self.map = { hash(value): value for value in collection }
+        self.map = {hash(value): value for value in collection}
         super().__init__()
 
     def __contains__(self, value):
@@ -38,6 +40,7 @@ class HashSet(MutableSet, Mapping):
 
     def __repr__(self):
         return "{" + ", ".join(map(repr, self.map.values())) + "}"
+
 
 class TracerouteVertex:
     def __init__(self, address):
@@ -95,6 +98,7 @@ class TracerouteVertex:
             "address": str(self.address),
             "rtt": self.rtt,
             "successors": list(map(id, self.successors)),
+            "predecessors": list(map(id, self.predecessors)),
         }
 
     @property
@@ -119,6 +123,7 @@ class TracerouteVertex:
 
 class BlackHoleVertex(TracerouteVertex):
     """A black hole."""
+
     def __init__(self):
         super().__init__("***")
 
@@ -132,6 +137,7 @@ class BlackHoleVertex(TracerouteVertex):
 class TracerouteHop(HashSet):
     """A custom container for the vertices at a given hop.
     Provides convenience properties and methods for the set of vertices."""
+
     def __init__(self, ttl):
         super().__init__()
         self.ttl = ttl
