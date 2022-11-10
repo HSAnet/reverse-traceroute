@@ -7,9 +7,12 @@ from .graph import *
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Sends a reverse-traceroute request to a target"
+        description="A multipath traceroute client able to trace in both the forward and reverse direction.",
+        formatter_class=argparse.RawTextHelpFormatter,
     )
-    parser.add_argument("target")
+    parser.add_argument(
+        "target", type=str, help="The traceroute target to traceroute to/from."
+    )
     parser.add_argument(
         "--timeout",
         type=float,
@@ -26,7 +29,8 @@ def parse_arguments():
         "--retry",
         type=int,
         default=3,
-        help="The maximum number of times to send a probe if no answer was received.",
+        help="If positive: The maximum count of retransmissons for unresponsive probes.\n"
+        + "If negative: The maximum count of successive unresponsive probe retransmissions.",
     )
     parser.add_argument(
         "--min-ttl", type=int, default=1, help="The TTL of the first hop to probe."
@@ -38,7 +42,7 @@ def parse_arguments():
         "--abort",
         type=int,
         default=3,
-        help="The maximum number of unresponsive hops in a row, after which to abort.",
+        help="The number of successive black holes and/or vertices after which to abort.",
     )
 
     parser.add_argument(
@@ -56,21 +60,13 @@ def parse_arguments():
         help="The base name of the output files, to which suffixes are appended.",
     )
 
-    stats_group = parser.add_argument_group()
-    stats_group.add_argument(
-        "-s",
-        "--statistics",
-        action="store_true",
-        help="Store statistics as json on the local file system.",
-    )
-    stats_group.add_argument(
-        "-t",
+    parser.add_argument(
         "--transmit",
         action="store_true",
-        help="Submit the statistics to HSA-Net as test data.",
+        help="Submit the statistics to HSA-Net for their measurement study.",
     )
 
-    direction_group = parser.add_argument_group()
+    direction_group = parser.add_argument_group("trace direction")
     direction_group.add_argument(
         "-r",
         "--reverse",
@@ -81,10 +77,11 @@ def parse_arguments():
         "-f", "--forward", action="store_true", help="Trace in the forward direction."
     )
 
-    protocol_group = parser.add_mutually_exclusive_group(required=False)
-    protocol_group.add_argument("-I", "--icmp", action="store_true")
-    protocol_group.add_argument("-U", "--udp", action="store_true")
-    protocol_group.add_argument("-T", "--tcp", action="store_true")
+    protocol_group = parser.add_argument_group("protocol")
+    exclusive_group = protocol_group.add_mutually_exclusive_group(required=False)
+    exclusive_group.add_argument("-I", "--icmp", action="store_true")
+    exclusive_group.add_argument("-U", "--udp", action="store_true")
+    exclusive_group.add_argument("-T", "--tcp", action="store_true")
 
     args = parser.parse_args()
     return args
@@ -96,7 +93,7 @@ def resolve_hostnames(root):
 
         try:
             addr, aliases, _ = socket.gethostbyaddr(address)
-            return True, [ addr ] + aliases
+            return True, [addr] + aliases
         except:
             return False, None
 
