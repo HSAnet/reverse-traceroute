@@ -95,7 +95,8 @@ def resolve_hostnames(root):
         import socket
 
         try:
-            return True, socket.gethostbyaddr(address)[0]
+            addr, aliases, _ = socket.gethostbyaddr(address)
+            return True, [ addr ] + aliases
         except:
             return False, None
 
@@ -157,7 +158,7 @@ def main():
         }
 
     hostnames = {}
-    node_str = lambda n: "\n".join((n.address, f"{n.rtt:.2f}", hostnames.get(n, "")))
+    node_str = lambda n: "\n".join((n.address, f"{n.rtt:.2f}", *hostnames.get(n, [""])))
 
     trace_args = (target, proto)
 

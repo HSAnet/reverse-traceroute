@@ -115,13 +115,20 @@ class DiamondMiner:
             start = 0
             stop = self._nprobes(alpha, hop)
             while stop > start:
+                n_flows = len(next_hop.flows)
+
                 flows = set(next(iter_flows) for _ in range(start, stop))
                 self._probe_and_update(hop, next_hop, flows)
 
-                # We assume that all probes received responses.
-                # Should this not be the case, then possibly due to rate limiting.
-                # In that case it does not make sense to send even more packets,
-                # so we just have to work with the assumption that all probes were answered.
+                # Break if we did not receive an answer to all of our flows.
+                # This is likely due to rate limiting, thus retransmitting
+                # our packets will take a lot of time.
+                # If the user wants to retransmit until no response after
+                # a given number of successive retries is received,
+                # he can set the retry parameter to a negative value.
+                if len(next_hop.flows) - n_flows < len(flows):
+                    break
+
                 start = stop
                 stop = self._nprobes(alpha, hop)
 
