@@ -196,7 +196,6 @@ def main():
 
     if args.transmit:
         measurement["hostnames"] = {k.address: v for k, v in hostnames.items()}
-        print(json.dumps(measurement, indent=4))
 
         choice = input(
             "Due to the --transmit flag, your data will be uploaded to the HSA-Net group.\n"
@@ -206,12 +205,19 @@ def main():
             try:
                 import requests
 
-                requests.post(
+                response = requests.post(
                     "http://playground.net.hs-augsburg.de:9999/post_trace",
+                    headers={"Content-type": "application/json"},
                     json=measurement,
+                    auth=requests.auth.HTTPBasicAuth(
+                        "augsburg-traceroute",
+                        "26XiTwgXQYsiwdrgGVWw",
+                    ),
                 )
-            except:
+                response.raise_for_status()
+            except Exception as e:
                 print("Failed to submit measurement data!")
+                print(e)
             else:
                 print(
                     "Successfully transmitted your data! Thank you for contributing to our measurement study."

@@ -74,6 +74,8 @@ class DiamondMiner:
         if len(hop) == 1:
             hop.first().flow_set.update(flows)
 
+        n_hops = len(next_hop)
+
         self._send_probes_to_hop(hop, flows - hop.flows)
         self._send_probes_to_hop(next_hop, flows)
 
@@ -81,6 +83,8 @@ class DiamondMiner:
             for next_vertex in next_hop:
                 if vertex.flow_set & next_vertex.flow_set:
                     vertex.add_successor(next_vertex)
+
+        return len(next_hop) - n_hops > 0
 
     def _nprobes(self, alpha, hop):
         """Computes the number of flows needed for the next hop depending
@@ -115,18 +119,8 @@ class DiamondMiner:
             start = 0
             stop = self._nprobes(alpha, hop)
             while stop > start:
-                n_flows = len(next_hop.flows)
-
                 flows = set(next(iter_flows) for _ in range(start, stop))
-                self._probe_and_update(hop, next_hop, flows)
-
-                # Break if we did not receive an answer to all of our flows.
-                # This is likely due to rate limiting, thus retransmitting
-                # our packets will take a lot of time.
-                # If the user wants to retransmit until no response after
-                # a given number of successive retries is received,
-                # he can set the retry parameter to a negative value.
-                if len(next_hop.flows) - n_flows < len(flows):
+                if not self._probe_and_update(hop, next_hop, flows):
                     break
 
                 start = stop

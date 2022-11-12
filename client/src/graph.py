@@ -14,6 +14,7 @@ def _merge_vertices(root):
             continue
 
         joint_vertex = TracerouteVertex(group[0].address)
+        print(f"Merging {len(group)} occurences of vertex {group[0].address}")
 
         for vertex in group:
             for v in vertex.predecessors.copy():
