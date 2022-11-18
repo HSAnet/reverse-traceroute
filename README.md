@@ -1,80 +1,126 @@
 # Reverse Traceroute
-
 This repository contains reference implementations for reverse traceroute client and server applications.  
-  
-These tools aim to fix the shortcomings of a classic traceroute, which is able to illuminate the forward path.
-Due to the Internet's asymmetric nature, meaning that forward and reverse paths often differ,
-the output of classic traceroute is of limited for problems arising only on the reverse path.
 
-## Protocol
-Reverse traceroute makes use of newly defined ICMP codes for the Echo Request/Response messages.
-Our measurements have shown that by reusing the existing ICMP Echo message types with a new code,
-the packets are able to traverse the Internet unfiltered in the majority of cases.
+Altough the protocol itself is able to support both IPv4 and IPv6 implementations,
+this work currently only runs on IPv4 and can be considered as a proof of concept.
 
-For each hop the client wishes to discover, it sends a reverse traceroute request message to the server.
-The server evaluates the response and notifies the client if an invalid configuration was specified.  
-Otherwise the server creates a new session associated with said request and issues a probe back towards
-the requester.
-When receiving a probe response the server computes the Round-Trip-Time (RTT) elapsed between
-issuing the probe and receiving the corresponding response.
-The address of the responding node and the RTT are then delivered back to the requestor.
+## The problem we want to solve
+Traceroute provides information on the forward path towards a target.
+As such, it is popular for troubleshooting problems on the forward path.
+Should a problem arise on the reverse path traceroute's output does not help
+and can even be misleading.  
 
-For more details on the inner workings of the reverse traceroute protocol check out the
-[internet draft](https://datatracker.ietf.org/doc/draft-heiwin-intarea-reverse-traceroute/).
+Thats why we developed reverse traceroute.
+Reverse traceroute allows you to determine the reverse path from a target host,
+which runs our server program, back to you,
+allowing you to detect and (hopefully) troubleshoot said issues.
 
-## Measurement study
-Our aim is to use reverse traceroute to study the characteristics of the Internet.
-If you want to support us, you can use the client application to transmit your measurement
-data to our server. Have a look at the examples for further information.
+## Design goals
+Reverse traceroute was built in accordance with the following principles:
+
+1. No direct control over the remote host ✅  
+    Access to the target host is not required. The target merely has to run our server.
+2. Safe to use ✅  
+    Reverse traceroute must not introduce possible attack vectors inside a network.
+3. Deployable in todays Internet ✅  
+    The messages sent by reverse traceroute should be able to traverse the Internet unaltered.
+4. Policable by network operators ✅  
+    Network operators who do not want reverse traceroute traffic inside their administrative domain
+    can easily enforce such restrictions.
+5. Awareness of load balancing ✅  
+    Reverse traceroute knows how to keep packets on a single path.
+6. No hackery (IP Spoofing / IP Options) ✅  
+    We refrain from using unorthodox means and practices, such as IP spoofing.
+7. No changes to routers required ✅  
+    The chances of deploying reverse traceroute in the wild increase when leaving routers untouched.
+8. Mimic classic traceroute ✅  
+    Reverse traceroute behaves just like regular traceroute. You can send UDP, TCP and ICMP probes
+    and expect both node address and Round-Trip-Time as a measurement.
 
 ## Client
-The client application is able to traverse multiple path to- and from a target.  
-It uses a variation of the Diamond Miner [1]() algorithm for detection of multiple paths.
-In order to discover the reverse path, the destination node has to run the reverse traceroute server.
+The client application supports both single- and multipath discovery.  
+When run in the singlepath mode a fixed flow identifier has to be specified, which
+determines the path that the traceroute probes will illuminate.  
+When run in the multipath mode, a variation of the DiamondMiner algorithm ensures
+that all nodes for a hop will be detected with a certainty specified by the user.
 
-You need an installation of graphviz to run the client application, as it relies on graphviz
-to render the trace as a graph.
+Both modes of operation can be used to in the forward and, since we are talking about reverse traceroute,
+in the **reverse** direction.
+
+As the client renders the discovered paths, you need the graphviz binary accessible through your
+`PATH` variable.
 
 ### Examples
-To discover only paths towards a destination with TCP, use the following command:
+To discover multiple paths towards a destination with TCP, use the following command:
 ```
-augsburg-traceroute -f -T target
+augsburg-traceroute forward tcp multipath <target>
 ```
 
-To discover only reverse path with UDP from a destination, which runs the reverse traceroute server:
+To discover only a single reverse path identified by flow 1234 with UDP back from a target:
 ```
-augsburg-traceroute -r -U target
+augsburg-traceroute reverse udp singlepath --flow 1234 <target>
 ```
 
 To discover both reverse and forward paths with TCP and submit the results to our measurement study:
 ```
-augsburg-traceroute -rf -T -t target
+augsburg-traceroute --transmit two-way tcp multipath <target>
 ```
+
+The client provides a few more fine-grained controls to influence the probing the behaviour.
+Run `augsburg-traceroute -h` to learn more.
 
 ## Server
 The server application is written as an eBPF program.
-It parses packets before they reach the Linux kernels TCP/IP Stack, which allows it to handle
-ICMP packet before they are processed by the kernel.
+In order to parse reverse traceroute requests and responses before they
+are processed by the kernel, it is attached to a traffic control ingress hook.
+
+As the application makes use of recent eBPF features such as timers,
+at least a linux kernel version of `5.15.0` is required.
 
 You can specify both the size of the session buffer and the timeout value,
-after which to drop sessions that have not seen a suitable probe response.
+after which to drop sessions that have been left unanswered.
+The interface index on which the server will process reverse traceroute traffic
+is a mandatory argument.
 
 ```
-augsburg-traceroute [-n MAX_SESSIONS] [-t TIMEOUT_NS] ifindex
+augsburg-traceroute-server [-n MAX_SESSIONS] [-t TIMEOUT_NS] ifindex
 ```
 
-In order to run the reverse traceroute server a kernel version of at least 5.15.0 is required.
+### Examples
+To run the server on the interface with index 2, with at most 50.000 sessions and
+and a session timeout of 5 seconds:
+
+```
+augsburg-traceroute-server -n 50000 -t 5000000000 2
+```
 
 ## Building the software
-To build both the client and server, run ```make``` in the project's root directory.  
+In the `server/` directory run:
+```
+bash build_docker.sh
+```
+The executable will be built in a docker container that includes
+the needed dependencies.
 
-For building the client, you need the poetry tool.
+## Measurement study
+We are trying to collect data about traceroute paths for our measurement study.
+If you want to participate, you can use the `--transmit` switch in the client
+to transmit your data to our server.  
 
-For building the server, the following dependencies are required:
-* clang-14
-* libelf-dev
-* linux-headers-generic
+Please be aware that the data includes hostnames by default.
+If you do not want to transmit resolved hostnames as part of the trace
+you can use the `--no-resolve` client switch.
+
+## Running a public server
+Reverse traceroute was designed as a distributed service.
+Hence it lives from the people who decide to host publicly available server endpoints.
+
+Should you decide to host such a reverse traceroute server,
+then please let us know so that we can add your server to the list of public reverse traceroute endpoints.
 
 ## Disclaimer
 Both the client and the server are subject to change, as they are still early in development.
 As such, you may encounter bugs.
+
+## Contact
+TODO

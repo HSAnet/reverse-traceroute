@@ -3,7 +3,6 @@
 #include "resize.h"
 #include "swap_addr.h"
 #include <bpf/bpf_endian.h>
-#include <bpf/bpf_helpers.h>
 #include <linux/bpf.h>
 #include <linux/icmp.h>
 #include <linux/icmpv6.h>
@@ -104,7 +103,9 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request) {
     // TODO: Should we handle syn-ack as well?
     // As the source port of probes stays the same
     // only a reponse to the first probe will be received.
-    if (!tcp->rst || tcp->dest != SOURCE_PORT)
+    if (tcp->dest != SOURCE_PORT)
+      return -1;
+    if (!tcp->rst && !(tcp->syn && tcp->ack))
       return -1;
 
     return bpf_ntohl(tcp->ack_seq) - 1;
@@ -130,7 +131,7 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
 
   icmp->type = 8;
   icmp->code = 0;
-  icmp->checksum = probe->flow;
+  icmp->checksum = probe->flow ? probe->flow : bpf_htons(0xbeaf);
   icmp->un.echo.sequence = probe->identifier;
   icmp->un.echo.id = SOURCE_PORT;
 
@@ -159,7 +160,7 @@ static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
     return -1;
 
   pseudo_hdr = pseudo_header(*ip, sizeof(*udp) + sizeof(*payload), IPPROTO_UDP);
-  udp->dest = probe->flow ? probe->flow : 53;
+  udp->dest = probe->flow ? probe->flow : bpf_htons(53);
   udp->source = SOURCE_PORT;
   udp->check = probe->identifier;
   udp->len = bpf_htons(sizeof(*udp) + 4);
@@ -178,28 +179,43 @@ static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
 static probe_error probe_set_tcp(struct cursor *cursor, struct probe *probe,
                                  struct ethhdr **eth, struct iphdr **ip) {
   struct tcphdr *tcp;
+  struct {
+    __u8 kind;
+    __u8 len;
+    __u16 value;
+  } * mss_option;
   __be32 pseudo_hdr;
 
-  if (resize_l3hdr(cursor, sizeof(*tcp), eth, ip) < 0)
+  if (resize_l3hdr(cursor, sizeof(*tcp) + sizeof(*mss_option), eth, ip) < 0)
     return -1;
   if (PARSE(cursor, &tcp) < 0)
     return -1;
+  if (PARSE(cursor, &mss_option) < 0)
+    return -1;
 
-  pseudo_hdr = pseudo_header(*ip, sizeof(*tcp), IPPROTO_TCP);
+  pseudo_hdr =
+      pseudo_header(*ip, sizeof(*tcp) + sizeof(*mss_option), IPPROTO_TCP);
   // Zero out tcp fields.
   *((__be32 *)tcp + 1) = 0;
   *((__be32 *)tcp + 2) = 0;
   *((__be32 *)tcp + 3) = 0;
   *((__be32 *)tcp + 4) = 0;
 
-  tcp->dest = probe->flow ? probe->flow : 80;
+  tcp->dest = probe->flow ? probe->flow : bpf_htons(80);
   tcp->source = SOURCE_PORT;
   tcp->seq = bpf_htonl(probe->identifier);
 
   tcp->syn = 1;
-  tcp->doff = 5;
+  tcp->doff = 6;
 
-  tcp->check = csum(tcp, sizeof(*tcp), pseudo_hdr);
+  tcp->window = bpf_htons(1024);
+
+  mss_option->kind = 2;
+  mss_option->len = 4;
+  mss_option->value = bpf_htons(1460);
+
+  tcp->check = 0;
+  tcp->check = csum(tcp, sizeof(*tcp) + sizeof(*mss_option), pseudo_hdr);
 
   return ERR_NONE;
 }

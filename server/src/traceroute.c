@@ -63,6 +63,15 @@ help:
 }
 
 static int traceroute_init(struct traceroute **tr, struct args *args) {
+
+  struct rlimit mem_limit = {
+      .rlim_cur = RLIM_INFINITY,
+      .rlim_max = RLIM_INFINITY,
+  };
+
+  if (setrlimit(RLIMIT_MEMLOCK, &mem_limit) < 0)
+    fprintf(stderr, "Failed to remove the memlock limit.\n");
+
   struct traceroute *traceroute = traceroute__open();
   *tr = traceroute;
 
@@ -71,29 +80,20 @@ static int traceroute_init(struct traceroute **tr, struct args *args) {
     return -1;
   }
 
-  if (args->TIMEOUT_NS > 0) {
+  if (args->TIMEOUT_NS > 0)
     traceroute->rodata->TIMEOUT_NS = args->TIMEOUT_NS;
-    fprintf(stderr, "Setting user defined timeout value: ");
-  } else {
-    fprintf(stderr, "Defaulting to timeout value: ");
-  }
-  fprintf(stderr, "%llu\n", traceroute->rodata->TIMEOUT_NS);
 
   if (args->MAX_ELEM > 0) {
     if (bpf_map__set_max_entries(traceroute->maps.map_sessions,
                                  args->MAX_ELEM) < 0) {
-      printf("Failed to set maximum number of elements to %u\n",
+      fprintf(stderr, "Failed to set maximum number of elements to %u\n",
              args->MAX_ELEM);
       return -1;
     }
-    printf("Setting user defined map size: ");
-  } else {
-    printf("Defaulting to map size: ");
   }
-  printf("%u\n", bpf_map__max_entries(traceroute->maps.map_sessions));
 
   if (traceroute__load(traceroute) < 0) {
-    printf("Failed to load the program.\n");
+    fprintf(stderr, "Failed to load the program.\n");
     return -1;
   }
 
@@ -108,19 +108,13 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 static int log_message(void *ctx, void *data, size_t size) {
 #define TSTAMP_MAX_LEN 25
   const char *tstamp_fmt = "%Y-%m-%dT%H:%M:%S%z";
-  static time_t last_time = 0;
 
   char address[INET_ADDRSTRLEN];
   char tstamp[TSTAMP_MAX_LEN + 1];
 
   const time_t rtime = time(NULL);
-  if (last_time == rtime) {
-    *tstamp = '\0';
-  } else {
-    last_time = rtime;
-    const struct tm *ltime = localtime(&rtime);
-    strftime(tstamp, sizeof(tstamp), tstamp_fmt, ltime);
-  }
+  const struct tm *ltime = localtime(&rtime);
+  strftime(tstamp, sizeof(tstamp), tstamp_fmt, ltime);
 
   struct message *msg = data;
   if (!inet_ntop(AF_INET, &msg->data.address, address, sizeof(address)))
@@ -130,21 +124,23 @@ static int log_message(void *ctx, void *data, size_t size) {
          address, msg->data.probe_id);
   switch (msg->type) {
   case SESSION_CREATED:
-    printf("session created.\n");
+    printf("session created.");
     break;
   case SESSION_DELETED:
-    printf("session deleted.\n");
+    printf("session deleted.");
     break;
   case SESSION_TIMEOUT:
-    printf("session timed out.\n");
+    printf("session timed out.");
     break;
   case SESSION_BUFFER_FULL:
-    printf("session buffer full.\n");
+    printf("session buffer full.");
     break;
   case SESSION_PROBE_ANSWERED:
-    printf("probe answer received.\n");
+    printf("probe answer received.");
     break;
   }
+  printf("\n");
+  fflush(stdout);
 
   return 0;
 }
@@ -181,6 +177,11 @@ int main(int argc, char **argv) {
     goto exit;
   if (bpf_tc_attach(&hook, &opts) < 0)
     goto destroy;
+
+  fprintf(stderr, "\n\nSession timeout in nanoseconds: %llu\n",
+          tr->rodata->TIMEOUT_NS);
+  fprintf(stderr, "Maximum session entries: %u\n\n\n",
+          bpf_map__max_entries(tr->maps.map_sessions));
 
   log_buf =
       ring_buffer__new(bpf_map__fd(tr->maps.log_buf), log_message, NULL, NULL);

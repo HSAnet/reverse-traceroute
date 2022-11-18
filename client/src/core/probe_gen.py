@@ -6,16 +6,18 @@ from collections import namedtuple
 from scapy.layers.inet import IP, ICMP, TCP, UDP, in4_chksum, checksum
 from scapy.sendrecv import send
 from ipaddress import IPv4Address
-
+from random import randint
 
 TracerouteResult = namedtuple("TracerouteResult", ["address", "rtt"])
 
 
-class Traceroute:
+class AbstractProbeGen:
     def __init__(self, target, protocol):
         self.target = target
         self.protocol = protocol
-        self._probe_id = itertools.cycle(range(1, 0xFF + 1))
+        self._probe_id = itertools.cycle(range(1, 0xFFFF + 1))
+        for _ in range(1, randint(1, 0xFFFF)):
+            next(self._probe_id)
 
     def create_probe(self, hop, flows):
         raise NotImplementedError("Override this method in your subclass")
@@ -24,7 +26,7 @@ class Traceroute:
         raise NotImplementedError("Override this method in your subclass")
 
 
-class ClassicTraceroute(Traceroute):
+class ClassicTraceroute(AbstractProbeGen):
     """Implements classic traceroute functionality."""
 
     def __init__(self, target, protocol):
@@ -41,11 +43,11 @@ class ClassicTraceroute(Traceroute):
             l3.load = struct.pack("!H", checksum(bytes(l3)))
 
         elif self.protocol == socket.IPPROTO_UDP:
-            l3 = UDP(dport=53, sport=flow, chksum=probe_id) / struct.pack("!H", 0)
+            l3 = UDP(dport=flow, sport=1021, chksum=probe_id) / struct.pack("!H", 0)
             l3.load = struct.pack("!H", in4_chksum(self.protocol, ip, bytes(l3)))
 
         elif self.protocol == socket.IPPROTO_TCP:
-            l3 = TCP(dport=80, sport=flow, seq=probe_id)
+            l3 = TCP(dport=flow, sport=1021, seq=probe_id)
 
         return ip / l3
 
@@ -56,7 +58,7 @@ class ClassicTraceroute(Traceroute):
         return TracerouteResult(address, rtt)
 
 
-class ReverseTraceroute(Traceroute):
+class ReverseTraceroute(AbstractProbeGen):
     """Implements reverse traceroute functionality."""
 
     class Error(Exception):

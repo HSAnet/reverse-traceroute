@@ -7,6 +7,7 @@ from mininet.cli import CLI
 from mininet.util import irange
 from mininet.link import Intf, TCIntf
 from ipaddress import ip_network
+from subprocess import TimeoutExpired
 
 import time
 import random
@@ -33,13 +34,13 @@ class Router(Node):
 
 
 class DiamondTopo(Topo):
-    def build(self, upper, lower, **kwargs):
+    def build(self, nrouters, **kwargs):
         addRouter = functools.partial(self.addNode, cls=Router, **kwargs)
 
         start_router = addRouter("start", ip=f"10.0.1.1/24")
         end_router = addRouter("end", ip=f"11.0.1.1/24")
-        upper_routers = [ addRouter(f"upper{i}", ip=f"12.0.{i+1}.1/24") for i in range(upper) ]
-        lower_routers = [ addRouter(f"lower{i}", ip=f"13.0.{i+1}.1/24") for i in range(lower) ]
+        upper_routers = [ addRouter(f"upper{i}", ip=f"12.0.{i+1}.1/24") for i in range(nrouters) ]
+        lower_routers = [ addRouter(f"lower{i}", ip=f"13.0.{i+1}.1/24") for i in range(nrouters) ]
 
         client = self.addHost(
             "client", ip="10.0.1.100/24", **kwargs
@@ -121,14 +122,13 @@ def node_routes(node):
     If a network is reachable over multiple interfaces with the same weight,
     a list of those interfaces is returned.
     """
-    net_to_weight = {}
     net_from_intf = {}
+    net_to_weight = {}
 
     local_nets = { intf_network(i) for i in node.intfList() }
 
     for intf in node.intfList():
         for net, weight in intf_routes(intf, excludes=local_nets).items():
-
             if net in net_from_intf:
                 if weight > net_to_weight[net]:
                     continue
@@ -138,7 +138,7 @@ def node_routes(node):
 
             net_from_intf[net] = [intf]
             net_to_weight[net] = weight
-    
+
     return net_from_intf
 
 
@@ -161,11 +161,12 @@ def configure_routes(node, routes):
 
 
 def run():
-    topo = DiamondTopo(2, 3)
+    topo = DiamondTopo(3)
     net = Mininet(
         topo=topo, waitConnected=True,
         intf=functools.partial(
-            TCIntf, delay=f"{random.randint(2,5)}ms", jitter="1ms"
+            Intf
+            #TCIntf, delay=f"{random.randint(2,5)}ms", jitter="1ms"
         )
     )
     net.start()
@@ -177,18 +178,30 @@ def run():
         routes = node_routes(node)
         configure_routes(node, routes)
 
-    net["end"].cmdPrint("ip route delete 10.0.1.0/24")
-    net["end"].cmdPrint("ip route add 10.0.1.0/24 nexthop via 12.0.3.2 nexthop via 13.0.4.2")
-    net["end"].cmdPrint("ip route show")
-    client, server = net["client"], net["server"]
-    server.sendCmd(f"./server/src/augsburg-traceroute 2");
+    open_processes = []
+    create_process = lambda node, cmd: open_processes.append(node.popen(cmd))
 
-    client.cmdPrint(f"augsburg-traceroute {server.IP()} -o tcp -s -r -T --inter 0 --timeout 1 --abort 1")
-    client.cmdPrint(f"augsburg-traceroute {server.IP()} -o udp -s -r -U --timeout 1 --abort 1")
-    client.cmdPrint(f"augsburg-traceroute {server.IP()} -o icmp -s -r -I --timeout 1 --abort 1")
+    try:
+        create_process(net["end"], "tcpdump -i any -w end.pcap")
 
-    server.sendInt()
-    server.waitOutput()
+        client, server = net["client"], net["server"]
+        create_process(server, "./server/src/augsburg-traceroute-server -n 50000 -t 1000000000 2")
+
+        time.sleep(1)
+        client.cmdPrint(f"augsburg-traceroute -o 'udp_single' --inter 0.05 --min-ttl 10 --timeout 1 --abort 3 reverse udp singlepath --flow 4444  {server.IP()}")
+        client.cmdPrint(f"augsburg-traceroute -o 'udp_single' --inter 0.05 --min-ttl 10 --timeout 1 --abort 3 reverse tcp singlepath --flow 4444 --probes 4 {server.IP()}")
+        client.cmdPrint(f"augsburg-traceroute -o 'udp_single' --inter 0.05 --min-ttl 10 --timeout 1 --abort 3 reverse icmp singlepath --flow 4444  {server.IP()}")
+
+        client.cmdPrint(f"augsburg-traceroute -o 'tcp' --inter 0.05 --timeout 1 --abort 3 two-way tcp multipath --retry -2 {server.IP()}")
+        client.cmdPrint(f"augsburg-traceroute -o 'udp' --inter 0.05 --timeout 1 --abort 3 two-way udp multipath --retry -2 {server.IP()}")
+        client.cmdPrint(f"augsburg-traceroute -o 'icmp' --inter 0.05 --timeout 1 --abort 3 two-way icmp multipath --retry -2 {server.IP()}")
+    finally:
+        for p in open_processes:
+            try:
+                p.terminate()
+                p.wait(timeout=1)
+            except TimeoutExpired:
+                p.kill()
 
     net.stop()
 

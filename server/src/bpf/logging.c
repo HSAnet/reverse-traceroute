@@ -1,12 +1,12 @@
 #include "logging.h"
 #include "../messages.h"
-#include <linux/types.h>
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
+#include <linux/types.h>
 
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
-  __uint(max_entries, 4096);
+  __uint(max_entries, 128 * 1024);
 } log_buf SEC(".maps");
 
 INTERNAL void log_message(enum message_type type, struct session_key *key) {

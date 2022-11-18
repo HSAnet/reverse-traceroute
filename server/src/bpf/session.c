@@ -1,8 +1,8 @@
 #include "session.h"
 #include "../config.h"
 #include "logging.h"
-#include <bpf/bpf_helpers.h>
 #include <linux/bpf.h>
+#include <bpf/bpf_helpers.h>
 #include <time.h>
 
 volatile const __u64 TIMEOUT_NS = DEFAULT_TIMEOUT_NS;

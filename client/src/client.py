@@ -1,90 +1,22 @@
-import argparse
+import logging
 import json
-from .traceroute import *
-from .miner import *
-from .graph import *
+import functools
+import socket
+from ipaddress import IPv4Address
+from concurrent.futures import ThreadPoolExecutor
 
+from scapy.sendrecv import sr1
+from scapy.route import conf
+import graphviz
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(
-        description="A multipath traceroute client able to trace in both the forward and reverse direction.",
-        formatter_class=argparse.RawTextHelpFormatter,
-    )
-    parser.add_argument(
-        "target", type=str, help="The traceroute target to traceroute to/from."
-    )
-    parser.add_argument(
-        "--timeout",
-        type=float,
-        default=2,
-        help="The maximum time to wait for probe response.",
-    )
-    parser.add_argument(
-        "--inter",
-        type=float,
-        default=0.1,
-        help="The time to wait between sending any two packets.",
-    )
-    parser.add_argument(
-        "--retry",
-        type=int,
-        default=3,
-        help="If positive: The maximum count of retransmissons for unresponsive probes.\n"
-        + "If negative: The maximum count of successive unresponsive probe retransmissions.",
-    )
-    parser.add_argument(
-        "--min-ttl", type=int, default=1, help="The TTL of the first hop to probe."
-    )
-    parser.add_argument(
-        "--max-ttl", type=int, default=15, help="The TTL of the last hop to probe."
-    )
-    parser.add_argument(
-        "--abort",
-        type=int,
-        default=3,
-        help="The number of successive black holes and/or vertices after which to abort.",
-    )
+from .core.engine import SinglepathEngine, MultipathEngine
+from .core.probe_gen import ClassicTraceroute, ReverseTraceroute
+from .core.container import BlackHoleVertex
 
-    parser.add_argument(
-        "-c",
-        "--confidence",
-        type=float,
-        default=0.05,
-        help="The confidence in discovering vertices. Must be between 0 and 1, smaller numbers signify a higher confidence.",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        type=str,
-        default="trace",
-        help="The base name of the output files, to which suffixes are appended.",
-    )
+from .graph import create_graph
 
-    parser.add_argument(
-        "--transmit",
-        action="store_true",
-        help="Submit the statistics to HSA-Net for their measurement study.",
-    )
-
-    direction_group = parser.add_argument_group("trace direction")
-    direction_group.add_argument(
-        "-r",
-        "--reverse",
-        action="store_true",
-        help="Trace in the reverse direction. Requires the target to run the augsburg-traceroute server.",
-    )
-    direction_group.add_argument(
-        "-f", "--forward", action="store_true", help="Trace in the forward direction."
-    )
-
-    protocol_group = parser.add_argument_group("protocol")
-    exclusive_group = protocol_group.add_mutually_exclusive_group(required=False)
-    exclusive_group.add_argument("-I", "--icmp", action="store_true")
-    exclusive_group.add_argument("-U", "--udp", action="store_true")
-    exclusive_group.add_argument("-T", "--tcp", action="store_true")
-
-    args = parser.parse_args()
-    return args
+from .args import parse_arguments
+from .transmit import transmit_measurement
 
 
 def resolve_hostnames(root):
@@ -101,124 +33,131 @@ def resolve_hostnames(root):
     nodes = set(v for v in root.flatten() if not isinstance(v, BlackHoleVertex))
     # Perform DNS lookup for IP addresses by concurrently calling
     # the resolve function.
-    from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor() as resolver:
         node_addresses = [node.address for node in nodes]
         hostnames = resolver.map(resolve, node_addresses)
         for node, (valid, hostname) in zip(nodes, hostnames):
             if valid:
-                resolve_table[node] = hostname
+                resolve_table[node.address] = hostname
 
     return resolve_table
 
 
 def main():
     args = parse_arguments()
-    if not args.forward and not args.reverse:
-        print("You need to specify at least one trace direction [-r/-f].")
-        exit()
-
-    if args.icmp:
-        proto = socket.IPPROTO_ICMP
-    elif args.tcp:
-        proto = socket.IPPROTO_TCP
-    else:
-        proto = socket.IPPROTO_UDP
+    logging.basicConfig(level=
+        {
+            "info": logging.INFO,
+            "debug": logging.DEBUG,
+            "warning": logging.WARNING,
+        }[args.log_level]
+    )
+    proto = {
+        "tcp": socket.IPPROTO_TCP,
+        "udp": socket.IPPROTO_UDP,
+        "icmp": socket.IPPROTO_ICMP,
+    }[args.protocol]
 
     try:
-        from ipaddress import IPv4Address
-
         target = str(IPv4Address(args.target))
     except:
         target = socket.gethostbyname(args.target)
 
-    discover = lambda trace, first_hop, target: DiamondMiner(
-        trace,
-        args.inter,
-        args.timeout,
-        args.retry,
-        args.abort,
-    ).discover(args.confidence, first_hop, args.min_ttl, args.max_ttl, target)
+    cls_args = {
+        "inter": args.inter,
+        "timeout": args.timeout,
+        "abort": args.abort,
+    }
+    if args.engine == "multipath":
+        merge = not args.no_merge
+        traceroute = MultipathEngine(confidence=args.confidence, retry=args.retry, **cls_args)
+    else:
+        merge = False
+        traceroute = SinglepathEngine(
+            flow=args.flow, probes_per_hop=args.probes, **cls_args
+        )
 
-    if args.transmit:
-        measurement = {
-            "confidence": args.confidence,
-            "min_ttl": args.min_ttl,
-            "protocol": proto,
-            "inter": args.inter,
-            "timeout": args.timeout,
-            "retry": args.retry,
-            "abort": args.abort,
-            "target": target,
-            "traces": {},
-        }
+    traces = {}
 
-    hostnames = {}
-    node_str = lambda n: "\n".join((n.address, f"{n.rtt:.2f}", *hostnames.get(n, [""])))
+    outgoing_ip = conf.route.route(target)[1]
+    if args.direction == "two-way" or args.direction == "forward":
+        probe_gen = ClassicTraceroute(target, proto)
+        first_hop = outgoing_ip
+        destination = target
+        root = traceroute.discover(probe_gen, args.min_ttl, args.max_ttl, first_hop, destination)
+        traces["forward"] = root
 
-    trace_args = (target, proto)
+    if args.direction == "two-way" or args.direction == "reverse":
+        probe_gen = ReverseTraceroute(target, proto)
 
-    if args.forward:
-        root = discover(ClassicTraceroute(*trace_args), "127.0.0.1", target)
-        hostnames.update(resolve_hostnames(root))
-
-        if args.transmit:
-            measurement["traces"]["forward"] = [x.to_dict() for x in root.flatten()]
-
-        create_graph(root, node_str).render(args.output + "_fwd", cleanup=True)
-    if args.reverse:
-        from scapy.sendrecv import sr1
-
-        trace = ReverseTraceroute(*trace_args)
-
-        # Check for the presence of a reverse traceroute server
-        req = trace.create_probe(0, 0)
-        resp = sr1(req, retry=args.retry, timeout=args.timeout, verbose=0)
+        # By requesting a probe with a TTL of 0 an error condition is created.
+        # A reverse traceroute server will reply with a status code 1,
+        # which is encoded into the same offset as the 0 TTL of the request.
+        # Should the target not run reverse traceroute, a regular Echo response
+        # with a matching code (0) will be received, triggering an exception.
+        req = probe_gen.create_probe(0, 0)
+        resp = sr1(req, retry=3, timeout=args.timeout, verbose=0)
         if not resp:
-            print("The target did not respond to the reverse traceroute probe.")
+            logging.error("The target did not respond to the reverse traceroute probe.")
             exit()
         try:
-            trace.parse_probe_response(req, resp)
+            probe_gen.parse_probe_response(req, resp)
         except ReverseTraceroute.InvalidTtlException:
             pass
         except Exception as e:
-            print(e)
+            logging.error(e)
             exit()
+        
+        first_hop = target
+        destination = outgoing_ip
+        root = traceroute.discover(probe_gen, args.min_ttl, args.max_ttl, first_hop, destination)
+        traces["reverse"] = root
 
-        root = discover(ReverseTraceroute(*trace_args), target, None)
-        hostnames.update(resolve_hostnames(root))
+    hostnames = {}
+    if not args.no_resolve:
+        for trace in traces.values():
+            hostnames.update(resolve_hostnames(trace))
 
-        if args.transmit:
-            measurement["traces"]["reverse"] = [x.to_dict() for x in root.flatten()]
+    measurement = {
+        **vars(args),
+        "traces": {
+            # Store the measurement raw (not merged).
+            # Should the merge logic change in the future, past measurements remain valid.
+            direction: [v.to_dict() for v in trace.flatten()]
+            for direction, trace in traces.items()
+        },
+        "hostnames": hostnames,
+    }
 
-        create_graph(root, node_str).render(args.output + "_rev", cleanup=True)
+    parent = graphviz.Digraph(strict=True)
+
+    for direction, trace in traces.items():
+        with parent.subgraph(name=f"cluster_{direction}") as g:
+            g.attr(style="filled", color="orange")
+            g.node_attr.update(style="filled")
+            g.attr(label=direction.upper())
+            create_graph(g, trace, hostnames, merge) 
+
+    parent.render(args.output, cleanup=True)
+
+    if args.store_json:
+        with open(f"{args.output}.json", "w") as writer:
+            json.dump(measurement, writer, indent=4)
 
     if args.transmit:
-        measurement["hostnames"] = {k.address: v for k, v in hostnames.items()}
-
         choice = input(
             "Due to the --transmit flag, your data will be uploaded to the HSA-Net group.\n"
             + "Do you want to proceed [Yes/No]: "
         )
         if choice.lower() == "yes":
             try:
-                import requests
-
-                response = requests.post(
-                    "http://playground.net.hs-augsburg.de:9999/post_trace",
-                    headers={"Content-type": "application/json"},
-                    json=measurement,
-                    auth=requests.auth.HTTPBasicAuth(
-                        "augsburg-traceroute",
-                        "26XiTwgXQYsiwdrgGVWw",
-                    ),
-                )
-                response.raise_for_status()
+                transmit_measurement(measurement)
             except Exception as e:
                 print("Failed to submit measurement data!")
                 print(e)
             else:
                 print(
-                    "Successfully transmitted your data! Thank you for contributing to our measurement study."
+                    "Successfully transmitted your data!"
+                    + " Thank you for contributing to our measurement study."
                 )

@@ -7,8 +7,7 @@
 #include <linux/ip.h>
 #include <linux/types.h>
 
-#define PAYLOAD_LEN 4
-#define SOURCE_PORT bpf_htons(4420)
+#define SOURCE_PORT bpf_htons(1021)
 
 struct probe {
   __be16 flow;

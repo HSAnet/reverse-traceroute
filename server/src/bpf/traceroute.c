@@ -46,17 +46,26 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     if (session_add(&session, &state) < 0)
       return TC_ACT_SHOT;
   } else {
-    struct response_args resp_args = {
-        .session = &session,
-        .state = NULL,
-        .error = err,
-    };
     // Here we are in a probe error condition.
-    if (response_create(cursor, &resp_args, eth, ip) < 0)
+    if (response_create_err(cursor, &session, err, eth, ip) < 0)
       return TC_ACT_SHOT;
   }
 
   return bpf_redirect(cursor->skb->ifindex, 0);
+}
+
+static int pass_to_kernel(struct cursor *cursor, struct ethhdr **eth,
+                          struct iphdr **ip) {
+  if (bpf_clone_redirect(cursor->skb, cursor->skb->ifindex, BPF_F_INGRESS) < 0)
+    return -1;
+
+  cursor_reset(cursor);
+  if (PARSE(cursor, eth) < 0)
+    return -1;
+  if (PARSE(cursor, ip) < 0)
+    return -1;
+
+  return 0;
 }
 
 /*
@@ -72,7 +81,7 @@ static int handle(struct cursor *cursor) {
   __u8 is_request;
 
   struct session_key session = {.padding = 0};
-  struct session_state *state;
+  struct session_state *stateptr, state;
 
   struct cursor l3_cursor;
 
@@ -120,22 +129,25 @@ static int handle(struct cursor *cursor) {
     goto no_match;
   session.identifier = ret;
 
-  state = session_find(&session);
-  if (!state)
+  stateptr = session_find(&session);
+  if (!stateptr)
     goto no_match;
+  else
+    // Create a copy of the state before deleting the entry.
+    state = *stateptr;
 
   log_message(SESSION_PROBE_ANSWERED, &session);
-
-  struct response_args args = {
-      .session = &session,
-      .state = state,
-      .error = ERR_NONE,
-  };
-
-  // Remove the session from our table and respond to the original requestor.
-  ret = response_create(cursor, &args, &eth, &ip);
   session_delete(&session);
 
+  // When a direct TCP response was received that matched a session entry,
+  // just pass a copy up to the kernel.
+  // The kernel having never seen an associated packet will issue an RST.
+  if (proto == IPPROTO_TCP && !is_request)
+    if (pass_to_kernel(cursor, &eth, &ip) < 0)
+      goto exit;
+
+  // Remove the session from our table and respond to the original requestor.
+  ret = response_create(cursor, &session, &state, &eth, &ip);
   if (ret < 0)
     goto exit;
   return bpf_redirect(cursor->skb->ifindex, 0);

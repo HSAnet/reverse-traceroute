@@ -1,9 +1,9 @@
 #include "resize.h"
-#include <linux/types.h>
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
+#include <linux/types.h>
 
 /*
  * Resizes the packet to be able to hold the specified length on top of the IPv4
