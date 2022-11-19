@@ -31,8 +31,8 @@ static __be32 pseudo_header(struct iphdr *ip, __u16 probe_len, __u8 protocol) {
  * In that case, the possible session identifier is returned.
  * Otherwise a negative value is returned.
  * If the is_request flag is set, the original l3 header is encapsulated
- * inside an ICMP error message, thus the first eight bytes of the original
- * header are returned unaltered.
+ * inside an ICMP error message, thus only the first eight bytes of the original
+ * header are parsed.
  */
 static int probe_match_icmp(struct cursor *cursor, __u8 is_request) {
   struct icmphdr *icmp;
@@ -58,8 +58,8 @@ static int probe_match_icmp(struct cursor *cursor, __u8 is_request) {
  * In that case, the possible session identifier is returned.
  * Otherwise a negative value is returned.
  * If the is_request flag is set, the original l3 header is encapsulated
- * inside an ICMP error message, thus the first eight bytes of the original
- * header are returned unaltered.
+ * inside an ICMP error message, thus only the first eight bytes of the original
+ * header are parsed.
  */
 static int probe_match_udp(struct cursor *cursor, __u8 is_request) {
   struct udphdr *udp;
@@ -84,8 +84,8 @@ static int probe_match_udp(struct cursor *cursor, __u8 is_request) {
  * In that case, the possible session identifier is returned.
  * Otherwise a negative value is returned.
  * If the is_request flag is set, the original l3 header is encapsulated
- * inside an ICMP error message, thus the first eight bytes of the original
- * header are returned unaltered.
+ * inside an ICMP error message, thus only the first eight bytes of the original
+ * header are parsed.
  */
 static int probe_match_tcp(struct cursor *cursor, __u8 is_request) {
   struct tcphdr *tcp;
@@ -100,9 +100,6 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request) {
   } else {
     if (PARSE(cursor, &tcp) < 0)
       return -1;
-    // TODO: Should we handle syn-ack as well?
-    // As the source port of probes stays the same
-    // only a reponse to the first probe will be received.
     if (tcp->dest != SOURCE_PORT)
       return -1;
     if (!tcp->rst && !(tcp->syn && tcp->ack))

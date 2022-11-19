@@ -1,5 +1,5 @@
 #include "session.h"
-#include "../config.h"
+#include "config.h"
 #include "logging.h"
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>

@@ -12,9 +12,9 @@
 #include <unistd.h>
 
 struct args {
-  int ifindex;      // Always specified by the user.
-  __u64 TIMEOUT_NS; // 0 if not specified.
-  __u32 MAX_ELEM;   // 0 if not specified.
+  int ifindex;      // Always specified by the user
+  __u64 TIMEOUT_NS; // Optional, 0 if not specified
+  __u32 MAX_ELEM;   // Optional, 0 if not specified
 };
 
 const char *fmt_help_message =
@@ -62,7 +62,7 @@ help:
   return -1;
 }
 
-static int traceroute_init(struct traceroute **tr, struct args *args) {
+static struct traceroute *traceroute_init(struct args *args) {
 
   struct rlimit mem_limit = {
       .rlim_cur = RLIM_INFINITY,
@@ -73,31 +73,34 @@ static int traceroute_init(struct traceroute **tr, struct args *args) {
     fprintf(stderr, "Failed to remove the memlock limit.\n");
 
   struct traceroute *traceroute = traceroute__open();
-  *tr = traceroute;
 
   if (!traceroute) {
     fprintf(stderr, "Failed to open the eBPF program.\n");
-    return -1;
+    goto err;
   }
 
-  if (args->TIMEOUT_NS > 0)
+  if (args->TIMEOUT_NS)
     traceroute->rodata->TIMEOUT_NS = args->TIMEOUT_NS;
 
-  if (args->MAX_ELEM > 0) {
+  if (args->MAX_ELEM) {
     if (bpf_map__set_max_entries(traceroute->maps.map_sessions,
                                  args->MAX_ELEM) < 0) {
       fprintf(stderr, "Failed to set maximum number of elements to %u\n",
              args->MAX_ELEM);
-      return -1;
+      goto cleanup;
     }
   }
 
   if (traceroute__load(traceroute) < 0) {
     fprintf(stderr, "Failed to load the program.\n");
-    return -1;
+    goto cleanup;
   }
 
-  return 0;
+  return traceroute;
+cleanup:
+  traceroute__destroy(traceroute);
+err:
+  return NULL;
 }
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
@@ -150,23 +153,21 @@ static volatile bool exiting = false;
 static void sig_handler(int signum) { exiting = true; }
 
 int main(int argc, char **argv) {
-  int ret;
+  int ret = EXIT_FAILURE;
   struct args args;
   struct traceroute *tr;
   struct ring_buffer *log_buf;
 
   if (parse_args(argc, argv, &args) < 0)
-    return -1;
+    goto exit;
 
   libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
   /* Set up libbpf errors and debug info callback */
   libbpf_set_print(libbpf_print_fn);
 
-  if ((ret = traceroute_init(&tr, &args)) < 0) {
-    if (tr)
-      traceroute__destroy(tr);
-    goto exit;
-  }
+  tr = traceroute_init(&args);
+  if (!tr)
+      goto exit;
 
   DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .ifindex = args.ifindex,
                       .attach_point = BPF_TC_INGRESS);
@@ -204,6 +205,7 @@ int main(int argc, char **argv) {
     }
   }
 
+  ret = EXIT_SUCCESS;
   ring_buffer__free(log_buf);
 detach:
   opts.flags = opts.prog_fd = opts.prog_id = 0;
@@ -211,7 +213,7 @@ detach:
 destroy:
   hook.attach_point = BPF_TC_INGRESS | BPF_TC_EGRESS;
   bpf_tc_hook_destroy(&hook);
-exit:
   traceroute__destroy(tr);
+exit:
   return ret;
 }

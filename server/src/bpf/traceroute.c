@@ -46,7 +46,6 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     if (session_add(&session, &state) < 0)
       return TC_ACT_SHOT;
   } else {
-    // Here we are in a probe error condition.
     if (response_create_err(cursor, &session, err, eth, ip) < 0)
       return TC_ACT_SHOT;
   }
@@ -105,6 +104,7 @@ static int handle(struct cursor *cursor) {
     // Clone the cursor before parsing the ICMP-header.
     // It may be reset to this position later.
     cursor_clone(cursor, &l3_cursor);
+
     if (PARSE(cursor, &icmp) < 0)
       goto no_match;
 
