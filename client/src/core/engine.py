@@ -10,12 +10,12 @@ from .probe_gen import AbstractProbeGen
 
 class AbstractEngine:
     def __init__(self, inter, timeout, abort):
+        assert inter >= 0
         self.inter = inter
-        assert self.inter >= 0
+        assert timeout > 0
         self.timeout = timeout
-        assert self.timeout > 0
+        assert abort >= 2
         self.abort = abort
-        assert self.abort >= 2
 
     def _init_root_vertex(self, root):
         pass
@@ -94,7 +94,9 @@ class SinglepathEngine(AbstractEngine):
 
     def __init__(self, flow, probes_per_hop, inter, timeout, abort):
         super().__init__(inter, timeout, abort)
+        assert probes_per_hop > 0
         self.probes_per_hop = probes_per_hop
+        assert flow > 0
         self.flow = flow
 
     def __send_probes_to_hop(self, probe_generator, hop):
@@ -195,8 +197,6 @@ class MultipathEngine(AbstractEngine):
         return max_probes
 
     def _probe_and_update(self, probe_generator, hop, next_hop):
-        """Sends probes with a given ttl and flows and updates the vertices
-        with relevant information, such as rtt and responding flows."""
         iter_flows = self.__generate_flows(hop)
 
         start = 0

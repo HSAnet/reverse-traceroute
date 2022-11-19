@@ -19,6 +19,29 @@ from .args import parse_arguments
 from .transmit import transmit_measurement
 
 
+def create_measurement_args(args):
+    return {
+        "target": args.target,
+        "protocol": args.protocol,
+
+        "min_ttl": args.min_ttl,
+        "max_ttl": args.max_ttl,
+
+        args.engine: {
+            "flow": args.flow,
+            "probes": args.probes,
+        } if args.engine == "singlepath" else {
+            "confidence": args.confidence,
+            "retry": args.retry,
+        },
+
+        "inter": args.inter,
+        "timeout": args.timeout,
+        "abort": args.abort
+    }
+
+
+
 def resolve_hostnames(root):
     def resolve(address):
         import socket
@@ -120,7 +143,7 @@ def main():
             hostnames.update(resolve_hostnames(trace))
 
     measurement = {
-        **vars(args),
+        **create_measurement_args(args),
         "traces": {
             # Store the measurement raw (not merged).
             # Should the merge logic change in the future, past measurements remain valid.
