@@ -12,7 +12,7 @@ without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with Augsburg-Traceroute.
-If not, see <https://www.gnu.org/licenses/>. 
+If not, see <https://www.gnu.org/licenses/>.
 */
 
 #ifndef SWAP_ADDR_H
@@ -23,9 +23,7 @@ If not, see <https://www.gnu.org/licenses/>.
 #include <linux/ipv6.h>
 #include <linux/types.h>
 
-static inline __attribute__((always_inline)) void
-swap_addr_ethhdr(struct ethhdr *ethhdr) {
-#pragma unroll
+static void swap_addr_ethhdr(struct ethhdr *ethhdr) {
   for (int i = 0; i < ETH_ALEN; i++) {
     __u8 byte = ethhdr->h_dest[i];
     ethhdr->h_dest[i] = ethhdr->h_source[i];
