@@ -1,3 +1,20 @@
+"""
+Copyright 2022 University of Applied Sciences Augsburg
+
+This file is part of Augsburg-Traceroute.
+
+Augsburg-Traceroute is free software: you can redistribute it and/or modify it under the terms
+of the GNU General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version.
+
+Augsburg-Traceroute is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with Augsburg-Traceroute.
+If not, see <https://www.gnu.org/licenses/>. 
+"""
+
 import logging
 import json
 import functools
@@ -12,14 +29,15 @@ import graphviz
 from .core.engine import SinglepathEngine, MultipathEngine
 from .core.probe_gen import ClassicTraceroute, ReverseTraceroute
 from .core.container import BlackHoleVertex
-
 from .graph import create_graph
-
 from .args import parse_arguments
 from .transmit import transmit_measurement
 
 
 def create_measurement_args(args):
+    """Creates a fixed mapping of CLI arguments to measurement parameters.
+    Should the CLI change in the future, it is the job of this function
+    to keep the measurement data coherent."""
     return {
         "target": args.target,
         "protocol": args.protocol,
@@ -43,6 +61,7 @@ def create_measurement_args(args):
 
 
 def resolve_hostnames(root):
+    """Map IP addresses to hostnames for a root vertex and its children."""
     def resolve(address):
         import socket
 
@@ -154,14 +173,12 @@ def main():
     }
 
     parent = graphviz.Digraph(strict=True)
-
     for direction, trace in traces.items():
         with parent.subgraph(name=f"cluster_{direction}") as g:
             g.attr(style="filled", color="orange")
             g.node_attr.update(style="filled")
             g.attr(label=direction.upper())
             create_graph(g, trace, hostnames, merge) 
-
     parent.render(args.output, cleanup=True)
 
     if args.store_json:
