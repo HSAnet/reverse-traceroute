@@ -12,7 +12,7 @@ without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with Augsburg-Traceroute.
-If not, see <https://www.gnu.org/licenses/>. 
+If not, see <https://www.gnu.org/licenses/>.
 """
 
 import itertools
@@ -20,6 +20,7 @@ import socket
 import struct
 import os
 from collections import namedtuple
+from scapy.packet import Packet
 from scapy.layers.inet import IP, ICMP, TCP, UDP, in4_chksum, checksum
 from scapy.sendrecv import send
 from ipaddress import IPv4Address
@@ -36,22 +37,24 @@ class AbstractProbeGen:
         for _ in range(1, randint(1, 0xFFFF)):
             next(self._probe_id)
 
-    def create_probe(self, hop, flows):
+    def create_probe(self, ttl: int, flow: int) -> Packet:
         raise NotImplementedError("Override this method in your subclass")
 
-    def parse_probe_response(self, request, response):
+    def parse_probe_response(
+        self, request: Packet, response: Packet
+    ) -> TracerouteResult:
         raise NotImplementedError("Override this method in your subclass")
 
 
 class ClassicTraceroute(AbstractProbeGen):
     """Implements classic traceroute functionality."""
 
-    def __init__(self, target, protocol):
+    def __init__(self, target: str, protocol: int):
         super().__init__(target, protocol)
 
-    def create_probe(self, hop, flow):
+    def create_probe(self, ttl: int, flow: int) -> Packet:
         probe_id = next(self._probe_id)
-        ip = IP(dst=self.target, ttl=hop)
+        ip = IP(dst=self.target, ttl=ttl)
 
         if self.protocol == socket.IPPROTO_ICMP:
             l3 = ICMP(
@@ -68,7 +71,9 @@ class ClassicTraceroute(AbstractProbeGen):
 
         return ip / l3
 
-    def parse_probe_response(self, request, response):
+    def parse_probe_response(
+        self, request: Packet, response: Packet
+    ) -> TracerouteResult:
         address = response.src
         rtt = (response.time - request.sent_time) * 1000
 
@@ -106,27 +111,28 @@ class ReverseTraceroute(AbstractProbeGen):
     def __init__(self, target, protocol):
         super().__init__(target, protocol)
 
-    def create_probe(self, hop, flow):
+    def create_probe(self, ttl: int, flow: int) -> Packet:
         probe_id = next(self._probe_id)
-        header = struct.pack("!BBH", hop, self.protocol, flow)
+        header = struct.pack("!BBH", ttl, self.protocol, flow)
         return IP(dst=self.target) / ICMP(type=8, code=1, id=probe_id, seq=0) / header
 
-    def parse_probe_response(self, request, response):
+    def parse_probe_response(
+        self, request: Packet, response: Packet
+    ) -> TracerouteResult:
         if response.type == 0 and response.code == 1:
             try:
                 raw_data = response.getlayer("Raw")
                 if raw_data:
                     load = raw_data.load
-                    status, err_len = struct.unpack("BB", load[:2])
+                    status, _ = struct.unpack("BB", load[:2])
 
                     if status == 0x00:
                         address, rtt = struct.unpack("!II", load[16:24])
                         return TracerouteResult(
                             str(IPv4Address(address)), rtt / 1000000
                         )
-                    else:
-                        if status in self.STATUS_TO_EXCEPTION:
-                            raise self.STATUS_TO_EXCEPTION[status]
+                    if status in self.STATUS_TO_EXCEPTION:
+                        raise self.STATUS_TO_EXCEPTION[status]
 
             # We receive this error when data cannot be unpacked due to a malformed response.
             # We assume a malformed response indicates the absence of a reverse traceroute server at the target.

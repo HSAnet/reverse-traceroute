@@ -12,14 +12,16 @@ without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with Augsburg-Traceroute.
-If not, see <https://www.gnu.org/licenses/>. 
+If not, see <https://www.gnu.org/licenses/>.
 """
 
 from graphviz import Digraph
 from .core.container import TracerouteVertex
 
 
-def create_graph(graph, root, hostnames, merge):
+def create_graph(
+    graph: Digraph, root: TracerouteVertex, hostnames: dict[str, str], merge: bool
+):
     """Create a digraph from the root vertex."""
     if merge:
         root.merge_vertices()

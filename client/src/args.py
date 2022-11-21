@@ -12,10 +12,9 @@ without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with Augsburg-Traceroute.
-If not, see <https://www.gnu.org/licenses/>. 
+If not, see <https://www.gnu.org/licenses/>.
 """
 
-"""Provides command line argument parsing functionality."""
 import argparse
 
 
@@ -85,7 +84,6 @@ def parse_arguments() -> argparse.Namespace:
         help="Submit the statistics to HSA-Net for their measurement study.",
     )
 
-    direction_group = parser.add_argument_group("direction")
     parser.add_argument(
         "direction",
         choices=("two-way", "forward", "reverse"),
@@ -111,7 +109,7 @@ def parse_arguments() -> argparse.Namespace:
         "--confidence",
         type=float,
         default=0.05,
-        help="The probability of failing to detect all vertices for a hop."
+        help="The probability of failing to detect all vertices for a hop.",
     )
     multipath_parser.add_argument(
         "--no-merge",

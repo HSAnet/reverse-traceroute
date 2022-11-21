@@ -12,10 +12,11 @@ without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with Augsburg-Traceroute.
-If not, see <https://www.gnu.org/licenses/>. 
+If not, see <https://www.gnu.org/licenses/>.
 """
 
 import logging
+from typing import Generator
 from collections.abc import MutableSet, Mapping
 from itertools import groupby
 from functools import reduce
@@ -63,18 +64,18 @@ class HashSet(MutableSet, Mapping):
 
 
 class TracerouteVertex:
-    def __init__(self, address):
+    def __init__(self, address: str):
         self.address = address
         self.flow_set = set()
         self.rtt_list = list()
         self.successors = set()
 
-    def update(self, flow, rtt):
+    def update(self, flow: int, rtt: int):
         """Update the flow identifier and rtt measurements for a vertex."""
         self.flow_set.add(flow)
         self.rtt_list.append(rtt)
 
-    def add_successor(self, other):
+    def add_successor(self, other: "TracerouteVertex"):
         """Adds a successor to the vertex.
         The successors predecessor is updates as well."""
         if not other in self.successors:
@@ -83,11 +84,11 @@ class TracerouteVertex:
                 logging.warning(f"Successor {other} is equal to its predecessor")
             self.successors.add(other)
 
-    def del_successor(self, other):
+    def del_successor(self, other: "TracerouteVertex"):
         """Deletes a predecessor of the vertex."""
         self.successors.remove(other)
 
-    def flatten(self):
+    def flatten(self) -> Generator["TracerouteVertex", None, None]:
         """Return a flattened sequence of vertices with unique ID's."""
         identifiers = set()
 
@@ -101,7 +102,7 @@ class TracerouteVertex:
 
         yield from _flatten(self)
 
-    def merge(self, other):
+    def merge(self, other: "TracerouteVertex") -> "TracerouteVertex":
         assert self == other
         logging.debug("Merging {self} with {other}")
 
@@ -129,7 +130,7 @@ class TracerouteVertex:
                 vertex.del_successor(v)
                 vertex.add_successor(reduced_buckets[reduced_buckets.index(v)])
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": id(self),
             "hash": hash(self),
@@ -140,14 +141,14 @@ class TracerouteVertex:
         }
 
     @property
-    def rtt(self):
+    def rtt(self) -> float:
         if not self.rtt_list:
             return 0
         return sum(self.rtt_list) / len(self.rtt_list)
 
     # __eq__ and __hash__ are needed to store instances of TracerouteVertex in sets.
     # A TracerouteVertex is identified only by its address.
-    def __eq__(self, other):
+    def __eq__(self, other: "TracerouteVertex"):
         if not isinstance(other, TracerouteVertex):
             return False
         return self.address == other.address
@@ -163,20 +164,21 @@ class BlackHoleVertex(TracerouteVertex):
     """A black hole, which is identified solely by its predecessor.
     Two black holes are hence equal if they share the same predecessor."""
 
-    def __init__(self, predecessor):
+    def __init__(self, predecessor: TracerouteVertex):
         super().__init__("***")
         self.predecessor = predecessor
         predecessor.add_successor(self)
         self.flow_set.update(predecessor.flow_set)
 
-    def __eq__(self, other):
-        return hash(self) == hash(other)
+    def __eq__(self, other: TracerouteVertex):
+        return isinstance(other, TracerouteVertex) and hash(self) == hash(other)
 
     def __hash__(self):
         return hash((self.address, self.predecessor))
 
     def __repr__(self):
         return f"BlackHole(predecessor={self.predecessor})"
+
 
 class TracerouteHop(HashSet):
     """A custom container for the vertices at a given hop.
@@ -186,7 +188,7 @@ class TracerouteHop(HashSet):
         super().__init__(collection)
         self.ttl = ttl
 
-    def add_or_update(self, vertex, flow, rtt):
+    def add_or_update(self, vertex: TracerouteVertex, flow: int, rtt: float):
         if vertex not in self:
             self.add(vertex)
             logging.info(f"Added new {vertex} to {self}")
@@ -198,13 +200,13 @@ class TracerouteHop(HashSet):
         return set(chain(*(v.flow_set for v in self)))
 
     @property
-    def addresses(self):
+    def addresses(self) -> set[str]:
         return set(v.address for v in self)
 
-    def first(self):
+    def first(self) -> TracerouteVertex:
         return next(iter(self))
 
-    def connectTo(self, other):
+    def connectTo(self, other: TracerouteVertex):
         assert isinstance(other, TracerouteHop)
 
         for vertex in self:

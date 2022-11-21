@@ -17,8 +17,8 @@ If not, see <https://www.gnu.org/licenses/>.
 
 import logging
 import json
-import functools
 import socket
+import argparse
 from ipaddress import IPv4Address
 from concurrent.futures import ThreadPoolExecutor
 
@@ -28,40 +28,39 @@ import graphviz
 
 from .core.engine import SinglepathEngine, MultipathEngine
 from .core.probe_gen import ClassicTraceroute, ReverseTraceroute
-from .core.container import BlackHoleVertex
+from .core.container import TracerouteVertex, BlackHoleVertex
 from .graph import create_graph
 from .args import parse_arguments
 from .transmit import transmit_measurement
 
 
-def create_measurement_args(args):
+def create_measurement_args(args: argparse.Namespace) -> dict:
     """Creates a fixed mapping of CLI arguments to measurement parameters.
     Should the CLI change in the future, it is the job of this function
     to keep the measurement data coherent."""
     return {
         "target": args.target,
         "protocol": args.protocol,
-
         "min_ttl": args.min_ttl,
         "max_ttl": args.max_ttl,
-
         args.engine: {
             "flow": args.flow,
             "probes": args.probes,
-        } if args.engine == "singlepath" else {
+        }
+        if args.engine == "singlepath"
+        else {
             "confidence": args.confidence,
             "retry": args.retry,
         },
-
         "inter": args.inter,
         "timeout": args.timeout,
-        "abort": args.abort
+        "abort": args.abort,
     }
 
 
-
-def resolve_hostnames(root):
+def resolve_hostnames(root: TracerouteVertex) -> dict[str, str]:
     """Map IP addresses to hostnames for a root vertex and its children."""
+
     def resolve(address):
         import socket
 
@@ -88,8 +87,8 @@ def resolve_hostnames(root):
 
 def main():
     args = parse_arguments()
-    logging.basicConfig(level=
-        {
+    logging.basicConfig(
+        level={
             "info": logging.INFO,
             "debug": logging.DEBUG,
             "warning": logging.WARNING,
@@ -113,7 +112,9 @@ def main():
     }
     if args.engine == "multipath":
         merge = not args.no_merge
-        traceroute = MultipathEngine(confidence=args.confidence, retry=args.retry, **cls_args)
+        traceroute = MultipathEngine(
+            confidence=args.confidence, retry=args.retry, **cls_args
+        )
     else:
         merge = False
         traceroute = SinglepathEngine(
@@ -127,7 +128,9 @@ def main():
         probe_gen = ClassicTraceroute(target, proto)
         first_hop = outgoing_ip
         destination = target
-        root = traceroute.discover(probe_gen, args.min_ttl, args.max_ttl, first_hop, destination)
+        root = traceroute.discover(
+            probe_gen, args.min_ttl, args.max_ttl, first_hop, destination
+        )
         traces["forward"] = root
 
     if args.direction == "two-way" or args.direction == "reverse":
@@ -150,10 +153,12 @@ def main():
         except Exception as e:
             logging.error(e)
             exit()
-        
+
         first_hop = target
         destination = outgoing_ip
-        root = traceroute.discover(probe_gen, args.min_ttl, args.max_ttl, first_hop, destination)
+        root = traceroute.discover(
+            probe_gen, args.min_ttl, args.max_ttl, first_hop, destination
+        )
         traces["reverse"] = root
 
     hostnames = {}
@@ -178,7 +183,7 @@ def main():
             g.attr(style="filled", color="orange")
             g.node_attr.update(style="filled")
             g.attr(label=direction.upper())
-            create_graph(g, trace, hostnames, merge) 
+            create_graph(g, trace, hostnames, merge)
     parent.render(args.output, cleanup=True)
 
     if args.store_json:

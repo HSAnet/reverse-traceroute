@@ -12,13 +12,14 @@ without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with Augsburg-Traceroute.
-If not, see <https://www.gnu.org/licenses/>. 
+If not, see <https://www.gnu.org/licenses/>.
 """
 
-from scapy.sendrecv import sr
 import random
 import math
 import logging
+from typing import Generator
+from scapy.sendrecv import sr
 
 from .container import TracerouteVertex, BlackHoleVertex, TracerouteHop
 from .mda import stopping_point
@@ -26,7 +27,7 @@ from .probe_gen import AbstractProbeGen
 
 
 class AbstractEngine:
-    def __init__(self, inter, timeout, abort):
+    def __init__(self, inter: float, timeout: float, abort: int):
         assert inter >= 0
         self.inter = inter
         assert timeout > 0
@@ -34,13 +35,25 @@ class AbstractEngine:
         assert abort >= 2
         self.abort = abort
 
-    def _init_root_vertex(self, root):
+    def _init_root_vertex(self, root: TracerouteVertex):
         pass
 
-    def _probe_and_update(self, probe_generator, hop, next_hop):
+    def _probe_and_update(
+        self,
+        probe_generator: AbstractProbeGen,
+        hop: TracerouteHop,
+        next_hop: TracerouteHop,
+    ):
         raise NotImplementedError
 
-    def discover(self, probe_generator, min_ttl, max_ttl, first_hop, target=None):
+    def discover(
+        self,
+        probe_generator: AbstractProbeGen,
+        min_ttl: int,
+        max_ttl: int,
+        first_hop: str,
+        target: str = None,
+    ) -> TracerouteVertex:
         """The main discovery logic of the traceroute engines.
         It proceeds until the target is hit (if defined) or successive identical
         vertices possibly intermixed with black holes are found in a length
@@ -110,14 +123,18 @@ class AbstractEngine:
 class SinglepathEngine(AbstractEngine):
     """A classic single path traceroute with a fixed flow."""
 
-    def __init__(self, flow, probes_per_hop, inter, timeout, abort):
+    def __init__(
+        self, flow: int, probes_per_hop: int, inter: float, timeout: float, abort: int
+    ):
         super().__init__(inter, timeout, abort)
         assert probes_per_hop > 0
         self.probes_per_hop = probes_per_hop
         assert flow > 0
         self.flow = flow
 
-    def __send_probes_to_hop(self, probe_generator, hop):
+    def __send_probes_to_hop(
+        self, probe_generator: AbstractProbeGen, hop: TracerouteHop
+    ):
         probes = [
             probe_generator.create_probe(hop.ttl, self.flow)
             for _ in range(self.probes_per_hop)
@@ -131,10 +148,15 @@ class SinglepathEngine(AbstractEngine):
 
             hop.add_or_update(vertex, self.flow, rtt)
 
-    def _init_root_vertex(self, root):
+    def _init_root_vertex(self, root: TracerouteVertex):
         root.flow_set.add(self.flow)
 
-    def _probe_and_update(self, probe_generator, hop, next_hop):
+    def _probe_and_update(
+        self,
+        probe_generator: AbstractProbeGen,
+        hop: TracerouteHop,
+        next_hop: TracerouteHop,
+    ):
         self.__send_probes_to_hop(probe_generator, next_hop)
         hop.connectTo(next_hop)
 
@@ -148,12 +170,12 @@ class MultipathEngine(AbstractEngine):
         self.retry = retry
         self.confidence = confidence
 
-    def __next_flow(self):
+    def __next_flow(self) -> int:
         """Generates a pseudo-random uniform flow identifier in the range
         between 10000 and 65535."""
         return int(random.uniform(10000, 65535))
 
-    def __generate_flows(self, hop):
+    def __generate_flows(self, hop) -> Generator[int, None, None]:
         """Generates flow identifiers to be used for the current hop.
         First all previously used identifiers are returned vertex by vertex.
         If they are exhausted, new identifiers are generated."""
@@ -199,7 +221,7 @@ class MultipathEngine(AbstractEngine):
             else:
                 unresp_counter += 1
 
-    def __nprobes(self, hop):
+    def __nprobes(self, hop: TracerouteHop) -> int:
         """Computes the number of flows needed for the next hop."""
         probes = lambda v: stopping_point(
             max(1, len(v.successors)) + 1, self.confidence
@@ -214,7 +236,7 @@ class MultipathEngine(AbstractEngine):
                 max_probes = result
         return max_probes
 
-    def _probe_and_update(self, probe_generator, hop, next_hop):
+    def _probe_and_update(self, probe_generator: AbstractProbeGen, hop, next_hop):
         iter_flows = self.__generate_flows(hop)
 
         start = 0
@@ -229,7 +251,9 @@ class MultipathEngine(AbstractEngine):
             # which is why we assign all flows to it's flow set beforehand.
             if len(hop) == 1:
                 hop.first().flow_set.update(flows)
-                logging.debug(f"Filled flow set of single vertex hop {hop.first()} at {hop}")
+                logging.debug(
+                    f"Filled flow set of single vertex hop {hop.first()} at {hop}"
+                )
             n_hops = len(next_hop)
 
             # Do not send flows that already reached the current hop.
