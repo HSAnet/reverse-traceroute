@@ -20,32 +20,42 @@ def pairwise(iterable):
     next(b, None)
     return zip(a, b)
 
+class TestNode(Node):
+    def config(self, **params):
+        super().config(**params)
+        self.cmd("sysctl net.ipv4.icmp_ratelimit=0")
+
+    def terminate(self):
+        self.cmd("sysctl net.ipv4.icmp_ratelimit=1000")
+        super().terminate()
 
 # Code from: https://github.com/mininet/mininet/blob/master/examples/linuxrouter.py
-class Router(Node):
+class Router(TestNode):
     def config(self, **params):
-        super(Router, self).config(**params)
+        super().config(**params)
         self.cmd("sysctl net.ipv4.ip_forward=1")
         self.cmd("sysctl net.ipv4.fib_multipath_hash_policy=1")
 
     def terminate(self):
         self.cmd("sysctl net.ipv4.ip_forward=0")
         self.cmd("sysctl net.ipv4.fib_multipath_hash_policy=0")
+        super().terminate()
 
 
 class DiamondTopo(Topo):
     def build(self, nrouters, **kwargs):
         addRouter = functools.partial(self.addNode, cls=Router, **kwargs)
+        addHost = functools.partial(self.addHost, cls=TestNode, **kwargs)
 
         start_router = addRouter("start", ip=f"10.0.1.1/24")
         end_router = addRouter("end", ip=f"11.0.1.1/24")
         upper_routers = [ addRouter(f"upper{i}", ip=f"12.0.{i+1}.1/24") for i in range(nrouters) ]
         lower_routers = [ addRouter(f"lower{i}", ip=f"13.0.{i+1}.1/24") for i in range(nrouters) ]
 
-        client = self.addHost(
+        client = addHost(
             "client", ip="10.0.1.100/24", **kwargs
         )
-        server = self.addHost(
+        server = addHost(
             "server", ip=f"11.0.1.100/24", **kwargs
         )
 
@@ -164,10 +174,6 @@ def run():
     topo = DiamondTopo(3)
     net = Mininet(
         topo=topo, waitConnected=True,
-        intf=functools.partial(
-            Intf
-            #TCIntf, delay=f"{random.randint(2,5)}ms", jitter="1ms"
-        )
     )
     net.start()
 
@@ -185,16 +191,11 @@ def run():
         create_process(net["end"], "tcpdump -i any -w end.pcap")
 
         client, server = net["client"], net["server"]
-        create_process(server, "./server/src/augsburg-traceroute-server -n 50000 -t 1000000000 2")
+        create_process(server, "./server/augsburg-traceroute-server -n 50000 -t 1000000000 2")
 
-        time.sleep(1)
-        client.cmdPrint(f"augsburg-traceroute -o 'udp_single' --inter 0.05 --min-ttl 10 --timeout 1 --abort 3 reverse udp singlepath --flow 4444  {server.IP()}")
-        client.cmdPrint(f"augsburg-traceroute -o 'udp_single' --inter 0.05 --min-ttl 10 --timeout 1 --abort 3 reverse tcp singlepath --flow 4444 --probes 4 {server.IP()}")
-        client.cmdPrint(f"augsburg-traceroute -o 'udp_single' --inter 0.05 --min-ttl 10 --timeout 1 --abort 3 reverse icmp singlepath --flow 4444  {server.IP()}")
-
-        client.cmdPrint(f"augsburg-traceroute -o 'tcp' --inter 0.05 --timeout 1 --abort 3 two-way tcp multipath --retry -2 {server.IP()}")
-        client.cmdPrint(f"augsburg-traceroute -o 'udp' --inter 0.05 --timeout 1 --abort 3 two-way udp multipath --retry -2 {server.IP()}")
-        client.cmdPrint(f"augsburg-traceroute -o 'icmp' --inter 0.05 --timeout 1 --abort 3 two-way icmp multipath --retry -2 {server.IP()}")
+        client.cmdPrint(f"augsburg-traceroute -l debug -o 'tcp' --inter 0 --timeout 1 --abort 3 two-way tcp multipath --retry -2 {server.IP()}")
+        client.cmdPrint(f"augsburg-traceroute -l debug -o 'udp' --inter 0 --timeout 1 --abort 3 two-way udp multipath --retry -2 {server.IP()}")
+        client.cmdPrint(f"augsburg-traceroute -l debug -o 'icmp' --inter 0 --timeout 1 --abort 3 two-way icmp multipath --retry -2 {server.IP()}")
     finally:
         for p in open_processes:
             try:
