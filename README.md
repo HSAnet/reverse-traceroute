@@ -66,7 +66,7 @@ To discover both reverse and forward paths with TCP and submit the results to ou
 augsburg-traceroute --transmit two-way tcp multipath <target>
 ```
 
-The client provides a few more fine-grained controls to influence the probing the behaviour.
+The client provides a few more fine-grained controls to influence the probing behaviour.  
 Run `augsburg-traceroute -h` to learn more.
 
 ## Server
@@ -78,7 +78,7 @@ As the application makes use of recent eBPF features such as timers,
 at least a linux kernel version of `5.15.0` is required.
 
 You can specify both the size of the session buffer and the timeout value,
-after which to drop sessions that have been left unanswered.
+after which unanswered sessions are dropped.  
 The interface index on which the server will process reverse traceroute traffic
 is a mandatory argument.
 
@@ -123,4 +123,5 @@ Both the client and the server are subject to change, as they are still early in
 As such, you may encounter bugs.
 
 ## Contact
-TODO
+Valentin Heinrich <valentin.heinrich@hs-augsburg.de>  
+Rolf Winter <rolf.winter@hs-augsburg.de>
