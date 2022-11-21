@@ -7,13 +7,13 @@ this work currently only runs on IPv4 and can be considered as a proof of concep
 ## The problem we want to solve
 Traceroute provides information on the forward path towards a target.
 As such, it is popular for troubleshooting problems on the forward path.
-Should a problem arise on the reverse path traceroute's output does not help
-and can even be misleading.  
+Should a problem arise on the reverse path traceroute's output offers no help
+and may even be misleading.  
 
 Thats why we developed reverse traceroute.
 Reverse traceroute allows you to determine the reverse path from a target host,
 which runs our server program, back to you,
-allowing you to detect and (hopefully) troubleshoot said issues.
+enabling you to detect and (hopefully) troubleshoot said issues.
 
 ## Design goals
 Reverse traceroute was built in accordance with the following principles:
@@ -41,8 +41,8 @@ Reverse traceroute was built in accordance with the following principles:
 The client application supports both single- and multipath discovery.  
 When run in the singlepath mode a fixed flow identifier has to be specified, which
 determines the path that the traceroute probes will illuminate.  
-When run in the multipath mode, a variation of the DiamondMiner algorithm ensures
-that all nodes for a hop will be detected with a certainty specified by the user.
+When run in the multipath mode, a variation of the [Diamond Miner](https://github.com/dioptra-io/diamond-miner)
+algorithm ensures that all nodes for a hop will be detected with a certainty specified by the user.
 
 Both modes of operation can be used to in the forward and, since we are talking about reverse traceroute,
 in the **reverse** direction.
@@ -70,7 +70,7 @@ The client provides a few more fine-grained controls to influence the probing be
 Run `augsburg-traceroute -h` to learn more.
 
 ## Server
-The server application is written as an eBPF program.
+The server application is written as an [eBPF](https://ebpf.io/what-is-ebpf/) program.
 In order to parse reverse traceroute requests and responses before they
 are processed by the kernel, it is attached to a traffic control ingress hook.
 
@@ -123,5 +123,5 @@ Both the client and the server are subject to change, as they are still early in
 As such, you may encounter bugs.
 
 ## Contact
-Valentin Heinrich <valentin.heinrich@hs-augsburg.de>  
-Rolf Winter <rolf.winter@hs-augsburg.de>
+Valentin Heinrich <valentin.heinrich@hs-augsburg.de\>  
+Rolf Winter <rolf.winter@hs-augsburg.de\>
