@@ -53,8 +53,8 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
   return bpf_redirect(cursor->skb->ifindex, 0);
 }
 
-static int pass_to_kernel(struct cursor *cursor, struct ethhdr **eth,
-                          struct iphdr **ip) {
+static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
+                               struct iphdr **ip) {
   if (bpf_clone_redirect(cursor->skb, cursor->skb->ifindex, BPF_F_INGRESS) < 0)
     return -1;
 
@@ -80,7 +80,7 @@ static int handle(struct cursor *cursor) {
   __u8 is_request;
 
   struct session_key session = {.padding = 0};
-  struct session_state *stateptr, state;
+  struct session_state *state;
 
   struct cursor l3_cursor;
 
@@ -129,25 +129,29 @@ static int handle(struct cursor *cursor) {
     goto no_match;
   session.identifier = ret;
 
-  stateptr = session_find(&session);
-  if (!stateptr)
+  state = session_find(&session);
+  if (!state)
     goto no_match;
-  else
-    // Create a copy of the state before deleting the entry.
-    state = *stateptr;
 
   log_message(SESSION_PROBE_ANSWERED, &session);
   session_delete(&session);
 
   // When a direct TCP response was received that matched a session entry,
-  // just pass a copy up to the kernel.
+  // just pass a copy to the ingress path of our associated interface after
+  // deleting the session entry.
+  // The next time the packet will be seen by this program it will
+  // not find an associated session and pass it on to the kernel.
   // The kernel having never seen an associated packet will issue an RST.
   if (proto == IPPROTO_TCP && !is_request)
-    if (pass_to_kernel(cursor, &eth, &ip) < 0)
+    if (skb_copy_to_ingress(cursor, &eth, &ip) < 0)
       goto exit;
 
   // Remove the session from our table and respond to the original requestor.
-  ret = response_create(cursor, &session, &state, &eth, &ip);
+  // Note: It is safe to access map elements after a delete call as execution
+  // takes places under an RCU read lock.
+  // Data associated with the deleted map entry will be reclaimed after program
+  // execution ends.
+  ret = response_create(cursor, &session, state, &eth, &ip);
   if (ret < 0)
     goto exit;
   return bpf_redirect(cursor->skb->ifindex, 0);

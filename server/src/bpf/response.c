@@ -4,12 +4,12 @@
 #include "resize.h"
 #include "session.h"
 #include "swap_addr.h"
-#include <linux/types.h>
-#include <bpf/bpf_endian.h>
 #include <linux/icmp.h>
 #include <linux/if_ether.h>
 #include <linux/in.h>
 #include <linux/ip.h>
+#include <linux/types.h>
+#include <bpf/bpf_endian.h>
 
 static void response_init_eth_ip(struct ethhdr *eth, struct iphdr *ip,
                                  __be32 from, __be32 to) {
