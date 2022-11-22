@@ -116,6 +116,18 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Do not merge the vertices before printing the graph.",
     )
+    multipath_parser.add_argument(
+        "--min-burst",
+        type=int,
+        default=20,
+        help="The minimum burst size to send to a hop.",
+    )
+    multipath_parser.add_argument(
+        "--max-burst",
+        type=int,
+        default=500,
+        help="The maximum burst size to send to a hop.",
+    )
     singlepath_parser = algo_parsers.add_parser(
         "singlepath", help="Illuminate a single path."
     )

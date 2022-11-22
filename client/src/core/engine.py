@@ -16,9 +16,13 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 
 import random
+import time
 import math
 import logging
+import itertools
 from typing import Generator
+from collections.abc import Iterable
+from functools import reduce
 from scapy.sendrecv import sr
 
 from .container import TracerouteVertex, BlackHoleVertex, TracerouteHop
@@ -87,7 +91,7 @@ class AbstractEngine:
             # Check if the abort condition is met.
             # If multiple successive black holes possibly intermixed with a single vertex
             # are found, increment the unresponsive counter.
-            has_black_holes = any(isinstance(v, BlackHoleVertex) for v in next_hop)
+            has_black_holes = all(isinstance(v, BlackHoleVertex) for v in next_hop)
             has_single_vertex = (
                 sum(1 for v in next_hop if not isinstance(v, BlackHoleVertex)) == 1
             )
@@ -166,11 +170,14 @@ class SinglepathEngine(AbstractEngine):
 class MultipathEngine(AbstractEngine):
     """A hop-by-hop variation of the existing diamond miner algorithm."""
 
-    def __init__(self, confidence, retry, inter, timeout, abort):
+    def __init__(self, confidence, retry, min_burst, max_burst, inter, timeout, abort):
         super().__init__(inter, timeout, abort)
         assert confidence > 0 and confidence < 1
         self.retry = retry
         self.confidence = confidence
+        assert min_burst > 0 and min_burst < max_burst
+        self.min_burst = min_burst
+        self.max_burst = max_burst
 
     def __next_flow(self) -> int:
         """Generates a pseudo-random uniform flow identifier in the range
@@ -194,26 +201,36 @@ class MultipathEngine(AbstractEngine):
         The algorithm works like the regular scapy sr() function,
         but a reimplementation is needed to create new probes with unique
         identifiers each round."""
+
         ttl = hop.ttl
+        chunk_size = self.min_burst
 
         unresp_counter = 0
         unresp_flows = set(flows)
 
         while unresp_flows:
             log.debug(f"Attempting to send {len(unresp_flows)} probes to {hop}")
-            flow_list = list(unresp_flows)
-            probes = [probe_generator.create_probe(ttl, flow) for flow in flow_list]
-            ans, unans = sr(probes, inter=self.inter, timeout=self.timeout, verbose=0)
 
-            for req, resp in ans:
-                flow = flow_list[probes.index(req)]
-                address, rtt = probe_generator.parse_probe_response(req, resp)
-                vertex = TracerouteVertex(address)
+            iter_flows = iter(list(unresp_flows))
+            while chunk := list(itertools.islice(iter_flows, chunk_size)):
+                log.debug(f"Using chunk size {chunk_size}")
 
-                hop.add_or_update(vertex, flow, rtt)
-                unresp_flows.discard(flow)
+                probes = [probe_generator.create_probe(ttl, flow) for flow in chunk]
+                ans, unans = sr(probes, inter=self.inter, timeout=self.timeout, verbose=0)
 
-            log.debug(f"Received {len(ans)} responses, {len(unans)} remaining.")
+                for req, resp in ans:
+                    flow = chunk[probes.index(req)]
+                    address, rtt = probe_generator.parse_probe_response(req, resp)
+                    vertex = TracerouteVertex(address)
+
+                    hop.add_or_update(vertex, flow, rtt)
+                    unresp_flows.discard(flow)
+
+                log.debug(f"Received {len(ans)} responses, {len(unans)} remaining.")
+                if len(ans) == chunk_size:
+                    chunk_size = min(self.max_burst, chunk_size * 2)
+                else:
+                    chunk_size = self.min_burst
 
             if unresp_counter >= abs(self.retry):
                 log.warn("Exceeded retry limit. Breaking from send loop.")
@@ -222,6 +239,8 @@ class MultipathEngine(AbstractEngine):
                 unresp_counter = 0
             else:
                 unresp_counter += 1
+
+
 
     def __nprobes(self, hop: TracerouteHop) -> int:
         """Computes the number of flows needed for the next hop."""

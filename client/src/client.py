@@ -54,6 +54,8 @@ def create_measurement_args(args: argparse.Namespace) -> dict:
         else {
             "confidence": args.confidence,
             "retry": args.retry,
+            "min_burst": args.min_burst,
+            "max_burst": args.max_burst,
         },
         "inter": args.inter,
         "timeout": args.timeout,
@@ -116,12 +118,12 @@ def main():
     if args.engine == "multipath":
         merge = not args.no_merge
         traceroute = MultipathEngine(
-            confidence=args.confidence, retry=args.retry, **cls_args
+            args.confidence, args.retry, args.min_burst, args.max_burst, **cls_args
         )
     else:
         merge = False
         traceroute = SinglepathEngine(
-            flow=args.flow, probes_per_hop=args.probes, **cls_args
+            args.flow, args.probes, **cls_args
         )
 
     traces = {}
