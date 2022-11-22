@@ -1,0 +1,10 @@
+BasedOnStyle: llvm
+IndentWidth: 4
+AllowShortFunctionsOnASingleLine: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+RemoveBracesLLVM: true
+BreakBeforeBraces: Linux
+SortIncludes: Never
+SpacesInLineCommentPrefix:
+    Minimum: 1
+    Maximum: 1
