@@ -23,6 +23,8 @@ from functools import reduce
 from itertools import chain
 
 
+log = logging.getLogger(__name__)
+
 class HashSet(MutableSet, Mapping):
     """A set, which maps an objects hash to the object itself.
     It behaves like a set but also allows lookup of existing elements with the
@@ -79,9 +81,9 @@ class TracerouteVertex:
         """Adds a successor to the vertex.
         The successors predecessor is updates as well."""
         if not other in self.successors:
-            logging.debug(f"Adding {other} as successor of {self}")
+            log.debug(f"Adding {other} as successor of {self}")
             if other == self:
-                logging.warning(f"Successor {other} is equal to its predecessor")
+                log.warning(f"Successor {other} is equal to its predecessor")
             self.successors.add(other)
 
     def del_successor(self, other: "TracerouteVertex"):
@@ -104,7 +106,7 @@ class TracerouteVertex:
 
     def merge(self, other: "TracerouteVertex") -> "TracerouteVertex":
         assert self == other
-        logging.debug("Merging {self} with {other}")
+        log.debug("Merging {self} with {other}")
 
         self.successors.update(other.successors)
         # Due to GRE-Tunneling or Unequal-Cost-Load-Balancing the same vertex
@@ -135,8 +137,7 @@ class TracerouteVertex:
             "id": id(self),
             "hash": hash(self),
             "address": self.address,
-            "rtt": list(self.rtt_list),
-            "flows": list(self.flow_set),
+            "rtt": self.rtt,
             "successors": list(map(id, self.successors)),
         }
 
@@ -191,7 +192,7 @@ class TracerouteHop(HashSet):
     def add_or_update(self, vertex: TracerouteVertex, flow: int, rtt: float):
         if vertex not in self:
             self.add(vertex)
-            logging.info(f"Added new {vertex} to {self}")
+            log.info(f"Added new {vertex} to {self}")
 
         self[vertex].update(flow, rtt)
 

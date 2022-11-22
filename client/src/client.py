@@ -34,6 +34,9 @@ from .args import parse_arguments
 from .transmit import transmit_measurement
 
 
+logging.getLogger("graphviz").setLevel(logging.ERROR)
+log = logging.getLogger(__name__)
+
 def create_measurement_args(args: argparse.Namespace) -> dict:
     """Creates a fixed mapping of CLI arguments to measurement parameters.
     Should the CLI change in the future, it is the job of this function
@@ -144,7 +147,7 @@ def main():
         req = probe_gen.create_probe(0, 0)
         resp = sr1(req, retry=3, timeout=args.timeout, verbose=0)
         if not resp:
-            logging.error("The target did not respond to the reverse traceroute probe.")
+            log.error("The target did not respond to the reverse traceroute probe.")
             exit()
         try:
             probe_gen.parse_probe_response(req, resp)

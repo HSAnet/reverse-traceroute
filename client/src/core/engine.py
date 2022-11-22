@@ -26,6 +26,8 @@ from .mda import stopping_point
 from .probe_gen import AbstractProbeGen
 
 
+log = logging.getLogger(__name__)
+
 class AbstractEngine:
     def __init__(self, inter: float, timeout: float, abort: int):
         assert inter >= 0
@@ -69,7 +71,7 @@ class AbstractEngine:
         last_known_vertex = None
 
         for ttl in range(min_ttl, max_ttl + 1):
-            logging.info(f"Probing hop with TTL {ttl}")
+            log.info(f"Probing hop with TTL {ttl}")
             next_hop = TracerouteHop(ttl)
             self._probe_and_update(probe_generator, hop, next_hop)
 
@@ -108,7 +110,7 @@ class AbstractEngine:
                 last_known_vertex = None
 
             if unresponsive >= self.abort:
-                logging.info("Limit of unresponsive hops exceeded. Aborting.")
+                log.info("Limit of unresponsive hops exceeded. Aborting.")
                 break
 
             hop = next_hop
@@ -198,7 +200,7 @@ class MultipathEngine(AbstractEngine):
         unresp_flows = set(flows)
 
         while unresp_flows:
-            logging.debug(f"Attempting to send {len(unresp_flows)} probes to {hop}")
+            log.debug(f"Attempting to send {len(unresp_flows)} probes to {hop}")
             flow_list = list(unresp_flows)
             probes = [probe_generator.create_probe(ttl, flow) for flow in flow_list]
             ans, unans = sr(probes, inter=self.inter, timeout=self.timeout, verbose=0)
@@ -211,10 +213,10 @@ class MultipathEngine(AbstractEngine):
                 hop.add_or_update(vertex, flow, rtt)
                 unresp_flows.discard(flow)
 
-            logging.debug(f"Received {len(ans)} responses, {len(unans)} remaining.")
+            log.debug(f"Received {len(ans)} responses, {len(unans)} remaining.")
 
             if unresp_counter >= abs(self.retry):
-                logging.warn("Exceeded retry limit. Breaking from send loop.")
+                log.warn("Exceeded retry limit. Breaking from send loop.")
                 break
             if ans and self.retry < 0:
                 unresp_counter = 0
@@ -243,7 +245,7 @@ class MultipathEngine(AbstractEngine):
         stop = self.__nprobes(hop)
         while stop > start:
             flows = set(next(iter_flows) for _ in range(start, stop))
-            logging.debug(f"Generated {len(flows)} flows.")
+            log.debug(f"Generated {len(flows)} flows.")
 
             # If the current hop only contains a single vertex,
             # all links will originate from it.
@@ -251,7 +253,7 @@ class MultipathEngine(AbstractEngine):
             # which is why we assign all flows to it's flow set beforehand.
             if len(hop) == 1:
                 hop.first().flow_set.update(flows)
-                logging.debug(
+                log.debug(
                     f"Filled flow set of single vertex hop {hop.first()} at {hop}"
                 )
             n_hops = len(next_hop)
@@ -268,7 +270,7 @@ class MultipathEngine(AbstractEngine):
             # will amplify the number of probes in each iteration,
             # without providing any new results.
             if len(next_hop) == n_hops:
-                logging.debug("No new vertices discovered. Stopped probing.")
+                log.debug("No new vertices discovered. Stopped probing.")
                 break
 
             start = stop
