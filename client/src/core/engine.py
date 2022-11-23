@@ -146,7 +146,7 @@ class SinglepathEngine(AbstractEngine):
             for _ in range(self.probes_per_hop)
         ]
 
-        ans, _ = sr(probes, inter=self.inter, timeout=self.timeout, retry=3, verbose=0)
+        ans, _ = sr(probes, inter=self.inter, timeout=self.timeout, verbose=0)
 
         for req, resp in ans:
             address, rtt = probe_generator.parse_probe_response(req, resp)
@@ -173,8 +173,9 @@ class MultipathEngine(AbstractEngine):
     def __init__(self, confidence, retry, min_burst, max_burst, inter, timeout, abort):
         super().__init__(inter, timeout, abort)
         assert confidence > 0 and confidence < 1
-        self.retry = retry
         self.confidence = confidence
+        assert retry >= 0
+        self.retry = retry
         assert min_burst > 0 and min_burst < max_burst
         self.min_burst = min_burst
         self.max_burst = max_burst
@@ -205,7 +206,7 @@ class MultipathEngine(AbstractEngine):
         ttl = hop.ttl
         chunk_size = self.min_burst
 
-        unresp_counter = 0
+        retry_counter = 0
         unresp_flows = set(flows)
 
         while unresp_flows:
@@ -232,13 +233,10 @@ class MultipathEngine(AbstractEngine):
                 else:
                     chunk_size = self.min_burst
 
-            if unresp_counter >= abs(self.retry):
+            if retry_counter >= abs(self.retry):
                 log.warn("Exceeded retry limit. Breaking from send loop.")
                 break
-            if ans and self.retry < 0:
-                unresp_counter = 0
-            else:
-                unresp_counter += 1
+            retry_counter += 1
 
 
 
@@ -279,7 +277,7 @@ class MultipathEngine(AbstractEngine):
 
             # Do not send flows that already reached the current hop.
             self.__send_probes_to_hop(probe_generator, hop, flows - hop.flows)
-            self.__send_probes_to_hop(probe_generator, next_hop, flows)
+            self.__send_probes_to_hop(probe_generator, next_hop, flows & hop.flows)
 
             hop.connectTo(next_hop)
 

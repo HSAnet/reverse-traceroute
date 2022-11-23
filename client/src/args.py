@@ -22,7 +22,6 @@ def parse_arguments() -> argparse.Namespace:
     """Parses the programs argument."""
     parser = argparse.ArgumentParser(
         description="A traceroute client able to trace in both the forward and reverse direction.",
-        formatter_class=argparse.RawTextHelpFormatter,
     )
 
     probing_group = parser.add_argument_group("probing options")
@@ -102,8 +101,7 @@ def parse_arguments() -> argparse.Namespace:
         "--retry",
         type=int,
         default=3,
-        help="If positive: The maximum count of retransmissons for unresponsive probes.\n"
-        + "If negative: The maximum count of successive unresponsive probe retransmissions.",
+        help="The maximum count of retransmissons for unresponsive probes."
     )
     multipath_parser.add_argument(
         "--confidence",
