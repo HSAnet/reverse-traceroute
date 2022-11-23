@@ -69,6 +69,7 @@ class TracerouteVertex:
     def __init__(self, address: str):
         self.address = address
         self.flow_set = set()
+        self.shadow_flow_set = set()
         self.rtt_list = list()
         self.successors = set()
 
@@ -137,7 +138,8 @@ class TracerouteVertex:
             "id": id(self),
             "hash": hash(self),
             "address": self.address,
-            "rtt": self.rtt,
+            "rtt": list(self.rtt_list),
+            "flows": list(self.flow_set),
             "successors": list(map(id, self.successors)),
         }
 
@@ -169,7 +171,7 @@ class BlackHoleVertex(TracerouteVertex):
         super().__init__("***")
         self.predecessor = predecessor
         predecessor.add_successor(self)
-        self.flow_set.update(predecessor.flow_set)
+        self.shadow_flow_set.update(predecessor.flow_set)
 
     def __eq__(self, other: TracerouteVertex):
         return isinstance(other, TracerouteVertex) and hash(self) == hash(other)
@@ -212,7 +214,9 @@ class TracerouteHop(HashSet):
 
         for vertex in self:
             for next_vertex in other:
-                if vertex.flow_set & next_vertex.flow_set:
+                flows = vertex.flow_set | vertex.shadow_flow_set
+                next_flows = next_vertex.flow_set | next_vertex.shadow_flow_set
+                if flows & next_flows:
                     vertex.add_successor(next_vertex)
 
     def __repr__(self):
