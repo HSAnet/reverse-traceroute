@@ -216,6 +216,8 @@ def run():
     create_process = lambda node, cmd: open_processes.append(node.popen(cmd))
 
     try:
+        net["lower0"].cmdPrint("iptables -A OUTPUT -p icmp -j DROP")
+        net["upper1"].cmdPrint("iptables -A OUTPUT -p icmp -j DROP")
         create_process(net["end"], "tcpdump -i any -w end.pcap")
 
         client, server = net["client"], net["server"]
@@ -224,14 +226,25 @@ def run():
         )
 
         client.cmdPrint(
-            f"augsburg-traceroute -l debug -o 'tcp' --inter 0 --timeout 1 --abort 3 two-way tcp multipath --retry -2 {server.IP()}"
+            f"augsburg-traceroute -s -l debug -o 'tcp' --inter 0 --timeout 1 --abort 3 two-way tcp multipath --retry 2 {server.IP()}"
         )
         client.cmdPrint(
-            f"augsburg-traceroute -l debug -o 'udp' --inter 0 --timeout 1 --abort 3 two-way udp multipath --retry -2 {server.IP()}"
+            f"augsburg-traceroute -s -l debug -o 'udp' --inter 0 --timeout 1 --abort 3 two-way udp multipath --retry 2 {server.IP()}"
         )
         client.cmdPrint(
-            f"augsburg-traceroute -l debug -o 'icmp' --inter 0 --timeout 1 --abort 3 two-way icmp multipath --retry -2 {server.IP()}"
+            f"augsburg-traceroute -s -l debug -o 'icmp' --inter 0 --timeout 1 --abort 3 two-way icmp multipath --retry 2 {server.IP()}"
         )
+
+        client.cmdPrint(
+            f"augsburg-traceroute -s -l debug -o 'tcp_single' --inter 0 --timeout 1 --abort 3 two-way tcp singlepath --flow 80 {server.IP()}"
+        )
+        client.cmdPrint(
+            f"augsburg-traceroute -s -l debug -o 'udp_single' --inter 0 --timeout 1 --abort 3 two-way udp singlepath --flow 53 {server.IP()}"
+        )
+        client.cmdPrint(
+            f"augsburg-traceroute -s -l debug -o 'icmp_single' --inter 0 --timeout 1 --abort 3 two-way icmp singlepath --flow 1919 {server.IP()}"
+        )
+
     finally:
         for p in open_processes:
             try:
