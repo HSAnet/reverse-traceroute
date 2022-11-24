@@ -19,7 +19,7 @@ import random
 import time
 import math
 import logging
-import itertools
+from itertools import islice, product
 from typing import Generator
 from collections.abc import Iterable
 from functools import reduce
@@ -32,19 +32,27 @@ from .probe_gen import AbstractProbeGen
 
 log = logging.getLogger(__name__)
 
+
 class AbstractEngine:
-    def __init__(self, inter: float, timeout: float, abort: int):
+    """An abstract implementation of a traceroute probing engine."""
+
+    def __init__(self, inter: float, timeout: float, abort: int, optimize: bool=False):
         assert inter >= 0
         self.inter = inter
         assert timeout > 0
         self.timeout = timeout
         assert abort >= 2
         self.abort = abort
+        self.optimize = optimize
 
-    def _generate_flows(self, hop) -> Generator[set[int], None, None]:
+    def _generate_flows(self, hop: TracerouteHop) -> Generator[set[int], None, None]:
+        """Generates flow sets for probing. Called by _probe_and_update."""
         raise NotImplementedError
 
-    def _send_probes_to_hop(self, probe_generator: AbstractProbeGen, hop: TracerouteHop, next_hop: TracerouteHop, flows: set[int]):
+    def _send_probes_to_hop(
+        self, probe_generator: AbstractProbeGen, hop: TracerouteHop, flows: set[int]
+    ):
+        """Sends probes with a set of flows to the specified hop."""
         raise NotImplementedError
 
     def _probe_and_update(
@@ -53,8 +61,8 @@ class AbstractEngine:
         hop: TracerouteHop,
         next_hop: TracerouteHop,
     ):
+        """Probes a pair of hops and connects their vertices to each other."""
         for flows in self._generate_flows(hop):
-            n_hops = len(next_hop)
 
             # Send probes to the next hop first.
             # For the path A -> B -> C -> D this leads to the following probing pattern:
@@ -62,22 +70,31 @@ class AbstractEngine:
             # "A -> B -> B -> C -> C -> D".
             # By avoiding to probe hops twice in a row the impact of rate limiting
             # is reduced.
+            n_hops = len(next_hop)
             self._send_probes_to_hop(probe_generator, next_hop, flows)
-            missing_flows = next_hop.flows - hop.flows
-            if len(hop) > 1:
-                self._send_probes_to_hop(probe_generator, hop, missing_flows)
-            else:
-                # Add all missing flows to the shadow flow set.
-                # As this is a single vertex hop, all successors will
-                # be connected to this vertex.
-                # In order to not waste probes, we fill the shadow flow set instead.
-                hop.first().shadow_flow_set.update(missing_flows)
-
-            hop.connectTo(next_hop)
-
             if len(next_hop) == n_hops:
                 log.warning("No new vertices detected, breaking from send loop")
                 break
+
+            missing_flows = next_hop.flows - hop.flows
+            if missing_flows:
+                send_probes = True
+
+                if len(hop) == 1:
+                    if hop.ttl == 0:
+                        log.debug("Root hop found -> Skipping send_probes")
+                        hop.first().flow_set.update(missing_flows)
+                        send_probes = False
+                    elif self.optimize:
+                        log.debug("Single vertex hop found -> Skipping send_probes")
+                        hop.first().shadow_flow_set.update(missing_flows)
+                        send_probes = False
+
+                if send_probes:
+                    self._send_probes_to_hop(probe_generator, hop, missing_flows)
+
+            hop.connectTo(next_hop)
+
 
     def discover(
         self,
@@ -164,11 +181,12 @@ class SinglepathEngine(AbstractEngine):
         assert flow > 0
         self.flow = flow
 
-    def _generate_flows(self, hop) -> Iterable[int]:
+    def _generate_flows(self, hop: TracerouteHop) -> Generator[set[int], None, None]:
+        """Generates a single flow set."""
         yield {self.flow}
 
     def _send_probes_to_hop(
-            self, probe_generator: AbstractProbeGen, hop: TracerouteHop, flows: set[int]
+        self, probe_generator: AbstractProbeGen, hop: TracerouteHop, flows: set[int]
     ):
         probes = [
             probe_generator.create_probe(hop.ttl, self.flow)
@@ -186,8 +204,18 @@ class SinglepathEngine(AbstractEngine):
 class MultipathEngine(AbstractEngine):
     """A hop-by-hop variation of the existing diamond miner algorithm."""
 
-    def __init__(self, confidence, retry, min_burst, max_burst, inter, timeout, abort):
-        super().__init__(inter, timeout, abort)
+    def __init__(
+        self,
+        confidence: float,
+        retry: int,
+        min_burst: int,
+        max_burst: int,
+        optimize: bool,
+        inter: float,
+        timeout: float,
+        abort: int,
+    ):
+        super().__init__(inter, timeout, abort, optimize)
         assert confidence > 0 and confidence < 1
         self.confidence = confidence
         assert retry >= 0
@@ -196,7 +224,9 @@ class MultipathEngine(AbstractEngine):
         self.min_burst = min_burst
         self.max_burst = max_burst
 
-    def _send_probes_to_hop(self, probe_generator, hop, flows):
+    def _send_probes_to_hop(
+        self, probe_generator: AbstractProbeGen, hop: TracerouteHop, flows: set[int]
+    ):
         """Sends probes with a given ttl and flows.
         The algorithm works like the regular scapy sr() function,
         but a reimplementation is needed to create new probes with unique
@@ -212,11 +242,13 @@ class MultipathEngine(AbstractEngine):
             log.debug(f"Attempting to send {len(unresp_flows)} probes to {hop}")
 
             iter_flows = iter(list(unresp_flows))
-            while chunk := list(itertools.islice(iter_flows, chunk_size)):
+            while chunk := list(islice(iter_flows, chunk_size)):
                 log.debug(f"Using chunk size {chunk_size}")
 
                 probes = [probe_generator.create_probe(ttl, flow) for flow in chunk]
-                ans, unans = sr(probes, inter=self.inter, timeout=self.timeout, verbose=0)
+                ans, unans = sr(
+                    probes, inter=self.inter, timeout=self.timeout, verbose=0
+                )
 
                 for req, resp in ans:
                     flow = chunk[probes.index(req)]
@@ -237,7 +269,6 @@ class MultipathEngine(AbstractEngine):
                 break
             retry_counter += 1
 
-
     def __nprobes(self, hop: TracerouteHop) -> int:
         """Computes the number of flows needed for the next hop."""
         probes = lambda v: stopping_point(
@@ -247,13 +278,15 @@ class MultipathEngine(AbstractEngine):
         total_flows = len(hop.flows)
         max_probes = 0
         for vertex in hop:
-            denominator = len(vertex.flow_set) / total_flows if vertex.flow_set else 1
+            denominator = len(vertex.flows) / total_flows if vertex.flow_set else 1
             result = math.ceil(probes(vertex) / denominator)
             if result > max_probes:
                 max_probes = result
         return max_probes
 
-    def _generate_flows(self, hop):
+    def _generate_flows(self, hop: TracerouteHop) -> Generator[set[int], None, None]:
+        """Generates flow sets until an optimal stopping point is reached."""
+
         def generate():
             prev_flows = hop.flows
             yield from prev_flows
@@ -267,5 +300,5 @@ class MultipathEngine(AbstractEngine):
         flow_generator = generate()
 
         while (stop := self.__nprobes(hop)) > start:
-            yield set(itertools.islice(flow_generator, stop - start))
+            yield set(islice(flow_generator, stop - start))
             start = stop

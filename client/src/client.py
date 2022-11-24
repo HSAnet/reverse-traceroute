@@ -56,6 +56,7 @@ def create_measurement_args(args: argparse.Namespace) -> dict:
             "retry": args.retry,
             "min_burst": args.min_burst,
             "max_burst": args.max_burst,
+            "single_vertex_probes": not args.no_opt,
         },
         "inter": args.inter,
         "timeout": args.timeout,
@@ -118,7 +119,7 @@ def main():
     if args.engine == "multipath":
         merge = not args.no_merge
         traceroute = MultipathEngine(
-            args.confidence, args.retry, args.min_burst, args.max_burst, **cls_args
+            args.confidence, args.retry, args.min_burst, args.max_burst, not args.no_opt, **cls_args
         )
     else:
         merge = False
@@ -185,7 +186,6 @@ def main():
     parent = graphviz.Digraph(strict=True)
     for direction, trace in traces.items():
         with parent.subgraph(name=f"cluster_{direction}") as g:
-            g.attr(style="filled", color="orange")
             g.node_attr.update(style="filled")
             g.attr(label=direction.upper())
             create_graph(g, trace, hostnames, merge)

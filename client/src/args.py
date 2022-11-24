@@ -115,6 +115,11 @@ def parse_arguments() -> argparse.Namespace:
         help="Do not merge the vertices before printing the graph.",
     )
     multipath_parser.add_argument(
+        "--no-opt",
+        action="store_true",
+        help="Send probes to a previous hop even if it contains a single vertex.",
+    )
+    multipath_parser.add_argument(
         "--min-burst",
         type=int,
         default=20,

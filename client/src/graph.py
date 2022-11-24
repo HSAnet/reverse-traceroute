@@ -35,4 +35,5 @@ def create_graph(
         graph.node(str(id(node)), label=label)
     for node in nodes:
         for next_node in node.successors:
-            graph.edge(str(id(node)), str(id(next_node)))
+            attr = { "color": "black" if node.flow_set & next_node.flow_set else "orange" }
+            graph.edge(str(id(node)), str(id(next_node)), **attr)

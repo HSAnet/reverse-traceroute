@@ -69,9 +69,19 @@ class TracerouteVertex:
     def __init__(self, address: str):
         self.address = address
         self.flow_set = set()
-        self.shadow_flow_set = set()
         self.rtt_list = list()
         self.successors = set()
+
+        # The shadow flow set contains flows
+        # which never really reached the vertex but
+        # should be treated like they did.
+        # E.g. black holes only contain shadow flows.
+        self.shadow_flow_set = set()
+
+    @property
+    def flows(self):
+        """Returns the current flow set, including the shadow flows."""
+        return self.flow_set | self.shadow_flow_set
 
     def update(self, flow: int, rtt: int):
         """Update the flow identifier and rtt measurements for a vertex."""
@@ -117,6 +127,7 @@ class TracerouteVertex:
         # See: https://community.cisco.com/t5/routing/tracert-show-same-hop-twice/td-p/1502358
         self.successors.discard(self)
         self.flow_set.update(other.flow_set)
+        self.shadow_flow_set.update(other.shadow_flow_set)
         self.rtt_list.extend(other.rtt_list)
 
         return self
@@ -172,6 +183,7 @@ class BlackHoleVertex(TracerouteVertex):
         self.predecessor = predecessor
         predecessor.add_successor(self)
         self.shadow_flow_set.update(predecessor.flow_set)
+        self.shadow_flow_set.update(predecessor.shadow_flow_set)
 
     def __eq__(self, other: TracerouteVertex):
         return isinstance(other, TracerouteVertex) and hash(self) == hash(other)
@@ -200,7 +212,7 @@ class TracerouteHop(HashSet):
 
     @property
     def flows(self):
-        return set(chain(*(v.flow_set for v in self)))
+        return set(chain(*(v.flows for v in self)))
 
     @property
     def addresses(self) -> set[str]:
@@ -214,10 +226,9 @@ class TracerouteHop(HashSet):
 
         for vertex in self:
             for next_vertex in other:
-                flows = vertex.flow_set | vertex.shadow_flow_set
-                next_flows = next_vertex.flow_set | next_vertex.shadow_flow_set
-                if flows & next_flows:
+                if vertex.flows & next_vertex.flows:
                     vertex.add_successor(next_vertex)
+
 
     def __repr__(self):
         return f"Hop(ttl={self.ttl}, len={len(self)})"
