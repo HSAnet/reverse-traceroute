@@ -57,7 +57,7 @@ def create_measurement_args(args: argparse.Namespace) -> dict:
             "retry": args.retry,
             "min_burst": args.min_burst,
             "max_burst": args.max_burst,
-            "single_vertex_probing": not args.opt_single_vertex_hop,
+            "single_vertex_probe_opt": args.opt_single_vertex_hop,
         },
         "inter": args.inter,
         "timeout": args.timeout,
