@@ -122,6 +122,11 @@ then please let us know so that we can add your server to the list of public rev
 Both the client and the server are subject to change, as they are still early in development.
 As such, you may encounter bugs.
 
+## Resources
+Project website: https://net.hs-augsburg.de/en/project/reverse-traceroute/  
+Protocol draft: https://datatracker.ietf.org/doc/html/draft-heiwin-intarea-reverse-traceroute  
+Talk at DENOG: https://youtu.be/Y7NtqLEtgjU
+
 ## Contact
 Valentin Heinrich <valentin.heinrich@hs-augsburg.de\>  
 Rolf Winter <rolf.winter@hs-augsburg.de\>
