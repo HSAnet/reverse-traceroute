@@ -101,7 +101,7 @@ def parse_arguments() -> argparse.Namespace:
         "--retry",
         type=int,
         default=3,
-        help="The maximum count of retransmissons for unresponsive probes."
+        help="The maximum count of retransmissons for unresponsive probes.",
     )
     multipath_parser.add_argument(
         "--confidence",
@@ -115,9 +115,9 @@ def parse_arguments() -> argparse.Namespace:
         help="Do not merge the vertices before printing the graph.",
     )
     multipath_parser.add_argument(
-        "--no-opt",
+        "--opt-single-vertex-hop",
         action="store_true",
-        help="Send probes to a previous hop even if it contains a single vertex.",
+        help="Do not send probes to a previous hop if it only contains a single vertex.",
     )
     multipath_parser.add_argument(
         "--min-burst",

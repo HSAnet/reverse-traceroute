@@ -25,6 +25,7 @@ from itertools import chain
 
 log = logging.getLogger(__name__)
 
+
 class HashSet(MutableSet, Mapping):
     """A set, which maps an objects hash to the object itself.
     It behaves like a set but also allows lookup of existing elements with the
@@ -117,7 +118,7 @@ class TracerouteVertex:
 
     def merge(self, other: "TracerouteVertex") -> "TracerouteVertex":
         assert self == other
-        log.debug("Merging {self} with {other}")
+        log.debug(f"Merging {self} with {other}")
 
         self.successors.update(other.successors)
         # Due to GRE-Tunneling or Unequal-Cost-Load-Balancing the same vertex
@@ -228,7 +229,6 @@ class TracerouteHop(HashSet):
             for next_vertex in other:
                 if vertex.flows & next_vertex.flows:
                     vertex.add_successor(next_vertex)
-
 
     def __repr__(self):
         return f"Hop(ttl={self.ttl}, len={len(self)})"

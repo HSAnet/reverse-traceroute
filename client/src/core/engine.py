@@ -36,14 +36,20 @@ log = logging.getLogger(__name__)
 class AbstractEngine:
     """An abstract implementation of a traceroute probing engine."""
 
-    def __init__(self, inter: float, timeout: float, abort: int, optimize: bool=False):
+    def __init__(
+        self,
+        inter: float,
+        timeout: float,
+        abort: int,
+        opt_single_vertex_hop: bool = False,
+    ):
         assert inter >= 0
         self.inter = inter
         assert timeout > 0
         self.timeout = timeout
         assert abort >= 2
         self.abort = abort
-        self.optimize = optimize
+        self.opt_single_vertex_hop = opt_single_vertex_hop
 
     def _generate_flows(self, hop: TracerouteHop) -> Generator[set[int], None, None]:
         """Generates flow sets for probing. Called by _probe_and_update."""
@@ -77,24 +83,25 @@ class AbstractEngine:
                 break
 
             missing_flows = next_hop.flows - hop.flows
-            if missing_flows:
-                send_probes = True
+            send_probes = lambda: self._send_probes_to_hop(
+                probe_generator, hop, missing_flows
+            )
 
+            if missing_flows:
                 if len(hop) == 1:
                     if hop.ttl == 0:
                         log.debug("Root hop found -> Skipping send_probes")
                         hop.first().flow_set.update(missing_flows)
-                        send_probes = False
-                    elif self.optimize:
+                    elif self.opt_single_vertex_hop:
                         log.debug("Single vertex hop found -> Skipping send_probes")
                         hop.first().shadow_flow_set.update(missing_flows)
-                        send_probes = False
-
-                if send_probes:
-                    self._send_probes_to_hop(probe_generator, hop, missing_flows)
+                    else:
+                        send_probes()
+                        hop.first().shadow_flow_set.update(missing_flows - hop.flows)
+                else:
+                    send_probes()
 
             hop.connectTo(next_hop)
-
 
     def discover(
         self,
@@ -210,12 +217,12 @@ class MultipathEngine(AbstractEngine):
         retry: int,
         min_burst: int,
         max_burst: int,
-        optimize: bool,
+        opt_single_vertex_hop: bool,
         inter: float,
         timeout: float,
         abort: int,
     ):
-        super().__init__(inter, timeout, abort, optimize)
+        super().__init__(inter, timeout, abort, opt_single_vertex_hop)
         assert confidence > 0 and confidence < 1
         self.confidence = confidence
         assert retry >= 0

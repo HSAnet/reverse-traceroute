@@ -37,6 +37,7 @@ from .transmit import transmit_measurement
 logging.getLogger("graphviz").setLevel(logging.ERROR)
 log = logging.getLogger(__name__)
 
+
 def create_measurement_args(args: argparse.Namespace) -> dict:
     """Creates a fixed mapping of CLI arguments to measurement parameters.
     Should the CLI change in the future, it is the job of this function
@@ -56,7 +57,7 @@ def create_measurement_args(args: argparse.Namespace) -> dict:
             "retry": args.retry,
             "min_burst": args.min_burst,
             "max_burst": args.max_burst,
-            "single_vertex_probes": not args.no_opt,
+            "single_vertex_probing": not args.opt_single_vertex_hop,
         },
         "inter": args.inter,
         "timeout": args.timeout,
@@ -119,13 +120,16 @@ def main():
     if args.engine == "multipath":
         merge = not args.no_merge
         traceroute = MultipathEngine(
-            args.confidence, args.retry, args.min_burst, args.max_burst, not args.no_opt, **cls_args
+            args.confidence,
+            args.retry,
+            args.min_burst,
+            args.max_burst,
+            args.opt_single_vertex_hop,
+            **cls_args,
         )
     else:
         merge = False
-        traceroute = SinglepathEngine(
-            args.flow, args.probes, **cls_args
-        )
+        traceroute = SinglepathEngine(args.flow, args.probes, **cls_args)
 
     traces = {}
 
