@@ -10,7 +10,7 @@ all: $(server)
 include tools.mk
 
 $(server): traceroute.c $(LIBBPF) traceroute.skel.h
-	clang-14 -Wall traceroute.c $(LIBBPF) $(INCLUDES) -o $@ -lelf -lz
+	clang-14 -Wall traceroute.c $(LIBBPF) $(INCLUDES) -o $@ -lelf -lz -static
 
 traceroute.skel.h: $(BPF_PROG) $(BPFTOOL)
 	$(BPFTOOL) gen skeleton $(BPF_PROG) > $@
