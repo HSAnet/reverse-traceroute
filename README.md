@@ -45,7 +45,7 @@ determines the path that the traceroute probes will illuminate.
 When run in the multipath mode, a variation of the [Diamond Miner](https://github.com/dioptra-io/diamond-miner)
 algorithm ensures that all nodes for a hop will be detected with a certainty specified by the user.
 
-Both modes of operation can be used to in the forward and, since we are talking about reverse traceroute,
+Both modes of operation can be used in the forward and, since we are talking about reverse traceroute,
 in the **reverse** direction.
 
 As the client renders the discovered paths, you need the graphviz binary accessible through your
@@ -76,7 +76,8 @@ In order to parse reverse traceroute requests and responses before they
 are processed by the kernel, it is attached to a traffic control ingress hook.
 
 As the application makes use of recent eBPF features such as timers,
-at least a linux kernel version of `5.15.0` is required.
+at least a recent linux kernel version of `5.15.0` is required.  
+We successfully tested the server on an x86-64 machine running Ubuntu 22.04 and a `5.15.0-52` kernel.
 
 You can specify both the size of the session buffer and the timeout value,
 after which unanswered sessions are dropped.  
