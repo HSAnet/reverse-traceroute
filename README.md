@@ -38,7 +38,8 @@ Reverse traceroute was built in accordance with the following principles:
     and expect both node address and Round-Trip-Time as a measurement.
 
 ## Client
-The client application supports both single- and multipath discovery.  
+The client is implemented as a Python script and requires at least `Python 3.10`.  
+It supports supports both single- and multipath discovery.
 
 When run in the singlepath mode a fixed flow identifier has to be specified, which
 determines the path that the traceroute probes will illuminate.  
@@ -133,6 +134,20 @@ Note that you have to replace `<ifname>` with the name of the interface
 the server should run on.
 
 ## Building the software
+### Client
+In order to build the client [Poetry](https://python-poetry.org/docs/) has to be installed.
+In the `client/` directory run:
+```
+poetry build -f wheel
+```
+The built package can be found in the `dist/` subdirectory.
+To install the built client, run:
+```
+pip3 install dist/<package-name>.whl
+```
+Make sure to replace `<package-name>` with the actual name of the package.
+
+### Server
 In the `server/` directory run:
 ```
 bash build_docker.sh
