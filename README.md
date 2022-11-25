@@ -128,7 +128,7 @@ In order to persist the service across reboots, run:
 ```
 sudo systemctl enable reverse-traceroute@<ifname>
 ```
-Note that you have to replace <ifname\> with the name of the interface
+Note that you have to replace `<ifname>` with the name of the interface
 the server should run on.
 
 ## Building the software
