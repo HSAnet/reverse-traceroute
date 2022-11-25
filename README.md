@@ -2,7 +2,7 @@
 This repository contains reference implementations for reverse traceroute client and server applications.  
 
 Altough the protocol itself is able to support both IPv4 and IPv6 implementations,
-this work currently only runs on IPv4 and can be considered as a proof of concept.
+this work currently only runs on IPv4.
 
 ## The problem we want to solve
 Traceroute provides information on the forward path towards a target.
@@ -116,7 +116,12 @@ Reverse traceroute was designed as a distributed service.
 Hence it lives from the people who decide to host publicly available server endpoints.
 
 Should you decide to host such a reverse traceroute server,
-then please let us know so that we can add your server to the list of public reverse traceroute endpoints.
+then please let us know so that we can add your server to the list of endpoints,
+which are maintained inside the `ENDPOINTS` file.
+
+## Future work
+* Implement IPv6 support for client and server
+* Introduce alias resolution to match nodes on both the forward and reverse path
 
 ## Disclaimer
 Both the client and the server are subject to change, as they are still early in development.
