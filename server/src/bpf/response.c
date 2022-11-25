@@ -28,6 +28,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/in.h>
 #include <linux/ip.h>
 #include <linux/types.h>
+#include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 
 static void response_init_eth_ip(struct ethhdr *eth, struct iphdr *ip,
@@ -125,7 +126,7 @@ INTERNAL int response_create(struct cursor *cursor, struct session_key *session,
     payload->addr.in6_u.u6_addr32[3] = from_addr;
 
     // Calculate timestamp.
-    timespan_ns = cursor->skb->tstamp - state->timestamp_ns;
+    timespan_ns = bpf_ktime_get_ns() - state->timestamp_ns;
     payload->timespan_ns = bpf_htonl(timespan_ns);
 
     response_init_eth_ip(*eth, *ip, source_addr, dest_addr);

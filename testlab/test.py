@@ -222,7 +222,7 @@ def run():
 
         client, server = net["client"], net["server"]
         create_process(
-            server, "./server/augsburg-traceroute-server -n 50000 -t 1000000000 2"
+            server, "./server/augsburg-traceroute-server -n 50000 -t 1000000000 server-eth0"
         )
 
         client.cmdPrint(

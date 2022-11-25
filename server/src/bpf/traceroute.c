@@ -46,7 +46,7 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     struct probe_args probe_args;
 
     struct session_key session = {.padding = 0};
-    struct session_state state = {.timestamp_ns = cursor->skb->tstamp};
+    struct session_state state = {.timestamp_ns = bpf_ktime_get_ns()};
 
     if (PARSE(cursor, &tr) < 0)
         return TC_ACT_UNSPEC;
