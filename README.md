@@ -39,6 +39,7 @@ Reverse traceroute was built in accordance with the following principles:
 
 ## Client
 The client application supports both single- and multipath discovery.  
+
 When run in the singlepath mode a fixed flow identifier has to be specified, which
 determines the path that the traceroute probes will illuminate.  
 When run in the multipath mode, a variation of the [Diamond Miner](https://github.com/dioptra-io/diamond-miner)
@@ -127,7 +128,7 @@ In order to persist the service across reboots, run:
 ```
 sudo systemctl enable reverse-traceroute@<ifname>
 ```
-Note that you have to replace <ifname> with the name of the interface
+Note that you have to replace <ifname\> with the name of the interface
 the server should run on.
 
 ## Building the software
