@@ -79,20 +79,56 @@ at least a linux kernel version of `5.15.0` is required.
 
 You can specify both the size of the session buffer and the timeout value,
 after which unanswered sessions are dropped.  
-The interface index on which the server will process reverse traceroute traffic
+The interface name on which the server will process reverse traceroute traffic
 is a mandatory argument.
 
 ```
-augsburg-traceroute-server [-n MAX_SESSIONS] [-t TIMEOUT_NS] ifindex
+sudo augsburg-traceroute-server [-n MAX_SESSIONS] [-t TIMEOUT_NS] ifname
 ```
 
 ### Examples
-To run the server on the interface with index 2, with at most 50.000 sessions and
+To run the server on the interface eth0, with at most 50.000 sessions and
 and a session timeout of 5 seconds:
 
 ```
-augsburg-traceroute-server -n 50000 -t 5000000000 2
+augsburg-traceroute-server -n 50000 -t 5000000000 eth0
 ```
+
+### Running the server as a service
+In order to persist the server application across reboots,
+you can create a systemd service.
+First you have to create the file `/etc/systemd/system/reverse-traceroute@.service`:
+
+```
+[Unit]
+Description=reverse-traceroute
+After=network-online.target
+  
+[Service]
+Type=simple
+ExecStart=<path-to-server> -n <max-sessions> -t <timeout-ns> %I
+ 
+[Install]
+WantedBy=multi-user.target
+```
+Make sure to replace the path to the server and arguments with your own configuration.
+
+Before starting the service, you have to make systemd aware of it by running:
+```
+sudo systemctl daemon-reload
+```
+
+Then you can start the service with the following command:
+```
+sudo systemctl start reverse-traceroute@<ifname>
+```
+
+In order to persist the service across reboots, run:
+```
+sudo systemctl enable reverse-traceroute@<ifname>
+```
+Note that you have to replace <ifname> with the name of the interface
+the server should run on.
 
 ## Building the software
 In the `server/` directory run:

@@ -27,8 +27,8 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/resource.h>
-#include <time.h>
 #include <unistd.h>
+#include <net/if.h>
 
 struct args {
     int ifindex;      // Always specified by the user
@@ -37,7 +37,7 @@ struct args {
 };
 
 const char *fmt_help_message =
-    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] if_index\n"
+    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] ifname\n"
     "\t-t: The time after which a session expires, in nanoseconds.\n"
     "\t-n: The maximum number of sessions the server can handle.\n";
 
@@ -69,7 +69,12 @@ static int parse_args(int argc, char **argv, struct args *args)
     }
 
     if (optind == argc - 1) {
-        args->ifindex = atoi(argv[optind]);
+        int index = if_nametoindex(argv[optind]);
+        if (!index) {
+            fprintf(stderr, "The specified interface does not exist!\n");
+            return -1;
+        }
+        args->ifindex = index;
         return 0;
     } else if (optind == argc) {
         fprintf(stderr, "Required argument interface index is missing!\n");
@@ -131,22 +136,13 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 
 static int log_message(void *ctx, void *data, size_t size)
 {
-#define TSTAMP_MAX_LEN 25
-    const char *tstamp_fmt = "%Y-%m-%dT%H:%M:%S%z";
-
     char address[INET_ADDRSTRLEN];
-    char tstamp[TSTAMP_MAX_LEN + 1];
-
-    const time_t rtime = time(NULL);
-    const struct tm *ltime = localtime(&rtime);
-    strftime(tstamp, sizeof(tstamp), tstamp_fmt, ltime);
 
     struct message *msg = data;
     if (!inet_ntop(AF_INET, &msg->data.address, address, sizeof(address)))
         return 0;
 
-    printf("%*s | [%*s, %5u] | ", TSTAMP_MAX_LEN, tstamp, INET_ADDRSTRLEN,
-           address, msg->data.probe_id);
+    printf("[%*s, %5u] | ", INET_ADDRSTRLEN, address, msg->data.probe_id);
     switch (msg->type) {
     case SESSION_CREATED:
         printf("session created.");
