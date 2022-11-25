@@ -83,7 +83,7 @@ static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
     cursor_reset(cursor);
     if (PARSE(cursor, eth) < 0)
         return -1;
-    if (PARSE(cursor, ip) < 0)
+    if (PARSE_IP(cursor, ip) < 0)
         return -1;
 
     return 0;
@@ -112,7 +112,7 @@ static int handle(struct cursor *cursor)
 
     if (PARSE(cursor, &eth) < 0)
         goto no_match;
-    if (PARSE(cursor, &ip) < 0)
+    if (PARSE_IP(cursor, &ip) < 0)
         goto no_match;
 
     // Initialize variables to default values.
@@ -135,7 +135,7 @@ static int handle(struct cursor *cursor)
             return handle_request(cursor, &eth, &ip, &icmp);
         } else if ((icmp->type == 11 && icmp->code == 0) || icmp->type == 3) {
             struct iphdr *inner_ip;
-            if ((ret = PARSE(cursor, &inner_ip)) < 0)
+            if ((ret = PARSE_IP(cursor, &inner_ip)) < 0)
                 goto no_match;
 
             proto = inner_ip->protocol;

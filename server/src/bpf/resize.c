@@ -26,7 +26,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 /*
  * Resizes the packet to be able to hold the specified length on top of the IPv4
- * header.
+ * header, all options are truncated.
  */
 INTERNAL int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
                           struct ethhdr **eth, struct iphdr **ip)
@@ -43,6 +43,7 @@ INTERNAL int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
     if (PARSE(cursor, ip) < 0)
         return -1;
 
+    (**ip).ihl = 5;
     (**ip).tot_len = bpf_htons(cursor->skb->len - sizeof(**eth));
 
     return 0;
