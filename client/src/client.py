@@ -92,6 +92,12 @@ def resolve_hostnames(root: TracerouteVertex) -> dict[str, str]:
     return resolve_table
 
 
+def prompt_confirm(prompt):
+    """Prints a prompt to stdout and asks for user confirmation [Yes/No]"""
+    choice = input(prompt + "\nDo you want to proceed [Yes/No]: ").lower()
+    return choice == "y" or choice == "yes"
+
+
 def main():
     args = parse_arguments()
     logging.basicConfig(
@@ -200,12 +206,12 @@ def main():
             json.dump(measurement, writer, indent=4)
 
     if args.transmit:
-        choice = input(
-            "Due to the --transmit flag, your data will be uploaded to the HSA-Net group.\n"
-            + "Do you want to proceed [Yes/No]: "
-        ).lower()
+        transmit = args.assume_yes or prompt_confirm(
+            "Due to the --transmit flag, "
+            + "your data will be uploaded to the HSA-Net group."
+        )
 
-        if choice == "y" or choice == "yes":
+        if transmit:
             try:
                 transmit_measurement(measurement)
             except Exception as e:

@@ -51,6 +51,12 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "-y",
+        "--assume-yes",
+        action="store_true",
+        help="Skip confirmation prompts and run the program in batch mode.",
+    )
+    parser.add_argument(
         "-n",
         "--no-resolve",
         action="store_true",
