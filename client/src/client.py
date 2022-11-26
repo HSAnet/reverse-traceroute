@@ -203,8 +203,9 @@ def main():
         choice = input(
             "Due to the --transmit flag, your data will be uploaded to the HSA-Net group.\n"
             + "Do you want to proceed [Yes/No]: "
-        )
-        if choice.lower() == "yes":
+        ).lower()
+
+        if choice == "y" or choice == "yes":
             try:
                 transmit_measurement(measurement)
             except Exception as e:
@@ -215,3 +216,5 @@ def main():
                     "Successfully transmitted your data!"
                     + " Thank you for contributing to our measurement study."
                 )
+        else:
+            print("Aborting transmission!")
