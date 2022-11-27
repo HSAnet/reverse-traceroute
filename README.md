@@ -1,6 +1,8 @@
 # Reverse Traceroute
-This repository contains reference implementations for reverse traceroute client and server applications.  
+Reverse traceroute is an extension to ICMP, enabling hosts to request traceroute measurements back to themselves from a remote target.  
+For detailed information about reverse traceroute and its concepts, have a look at the [resources](#resources).
 
+This repository contains reference implementations for reverse traceroute client and server applications.  
 Altough the protocol itself is able to support both IPv4 and IPv6 implementations,
 this work currently only runs on IPv4.
 
