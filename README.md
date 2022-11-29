@@ -136,6 +136,12 @@ Note that you have to replace `<ifname>` with the name of the interface
 the server should run on.
 
 ## Building the software
+This repository includes dependencies in the form of git submodules,
+which must be initialized before the software can be built.  
+To initialize said submodules when cloning the repository, run:
+```
+git clone --recurse-submodules https://github.com/HSAnet/reverse-traceroute
+```
 ### Client
 In order to build the client [Poetry](https://python-poetry.org/docs/) has to be installed.
 In the `client/` directory run:
