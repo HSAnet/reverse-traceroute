@@ -149,9 +149,9 @@ In the `client/` directory run:
 poetry build -f wheel
 ```
 The built package can be found in the `dist/` subdirectory.
-To install the built client, run:
+To install the built client globally, run:
 ```
-pip3 install dist/<package-name>.whl
+sudo pip3 install dist/<package-name>.whl
 ```
 Make sure to replace `<package-name>` with the actual name of the package.
 
