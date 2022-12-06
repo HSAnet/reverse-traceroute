@@ -17,28 +17,13 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef SESSION_H
-#define SESSION_H
+#ifndef LOGGING_H
+#define LOGGING_H
 
+#include "../../messages.h"
 #include "internal.h"
-#include <linux/bpf.h>
-#include <linux/types.h>
+#include "session.h"
 
-// IMPORTANT: These are the main configuration values for state maintenance.
-
-struct session_key {
-    __be32 addr;
-    __u16 identifier;
-    __u16 padding;
-};
-
-struct session_state {
-    __u64 timestamp_ns;
-};
-
-INTERNAL int session_delete(struct session_key *session);
-INTERNAL struct session_state *session_find(struct session_key *key);
-INTERNAL int session_add(struct session_key *session,
-                         struct session_state *state);
+INTERNAL void log_message(enum message_type type, struct session_key *key);
 
 #endif

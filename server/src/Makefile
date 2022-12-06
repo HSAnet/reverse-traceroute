@@ -1,4 +1,4 @@
-BPF_DIR := $(abspath bpf)
+BPF_DIR := $(abspath bpf)/v6
 BPF_PROG := $(BPF_DIR)/traceroute.o
 
 OUTDIR := .
