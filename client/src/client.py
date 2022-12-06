@@ -23,7 +23,8 @@ from ipaddress import IPv4Address
 from concurrent.futures import ThreadPoolExecutor
 
 from scapy.sendrecv import sr1
-from scapy.route import conf
+from scapy.route import conf as route_conf
+from scapy.config import conf as scapy_conf
 import graphviz
 
 from .core.engine import SinglepathEngine, MultipathEngine
@@ -36,6 +37,7 @@ from .transmit import transmit_measurement
 
 logging.getLogger("graphviz").setLevel(logging.ERROR)
 log = logging.getLogger(__name__)
+scapy_conf.warning_threshold = float("inf")
 
 
 def create_measurement_args(args: argparse.Namespace) -> dict:
@@ -139,7 +141,7 @@ def main():
 
     traces = {}
 
-    outgoing_ip = conf.route.route(target)[1]
+    outgoing_ip = route_conf.route.route(target)[1]
     if args.direction == "two-way" or args.direction == "forward":
         probe_gen = ClassicTraceroute(target, proto)
         first_hop = outgoing_ip
