@@ -36,8 +36,18 @@ from .transmit import transmit_measurement
 
 
 logging.getLogger("graphviz").setLevel(logging.ERROR)
-log = logging.getLogger(__name__)
+
+# Issue each warning exactly once
 scapy_conf.warning_threshold = float("inf")
+# Do not propagate any scapy logs to the root logger to avoid duplicates
+if logging.getLogger("scapy").hasHandlers():
+    logging.getLogger("scapy").propagate = False
+# Filter all scapy messages starting with "more"
+logging.getLogger("scapy.runtime").addFilter(
+    lambda record: 0 if record.msg.startswith("more") else 1
+)
+
+log = logging.getLogger(__name__)
 
 
 def create_measurement_args(args: argparse.Namespace) -> dict:
