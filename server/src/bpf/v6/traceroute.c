@@ -55,7 +55,7 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     session.identifier = (*icmp)->icmp6_dataun.u_echo.identifier;
 
     probe_args.ttl = tr->request.ttl;
-    probe_args.proto = tr->request.proto ?: IPPROTO_ICMP;
+    probe_args.proto = tr->request.proto;
     probe_args.probe.flow = tr->request.flow;
     probe_args.probe.identifier = (*icmp)->icmp6_dataun.u_echo.identifier;
 

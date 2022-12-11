@@ -277,11 +277,11 @@ INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
 
     if (args->ttl == 0)
         return ERR_TTL;
+    if (args->proto == 0)
+        args->proto = IPPROTO_ICMPV6;
 
     switch (args->proto) {
-    // In case of 0 we MUST use a suitable default value.
-    case 0:
-    case IPPROTO_ICMP:
+    case IPPROTO_ICMPV6:
         ret = probe_set_icmp(cursor, probe, eth, ip);
         break;
     case IPPROTO_UDP:

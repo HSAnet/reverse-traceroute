@@ -43,7 +43,7 @@ INTERNAL int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
     if (PARSE(cursor, ip) < 0)
         return -1;
 
-    (**ip).payload_len = bpf_htons(cursor->skb->len - sizeof(**eth));
+    (**ip).payload_len = bpf_htons(cursor->skb->len - sizeof(**eth) - sizeof(**ip));
 
     return 0;
 }

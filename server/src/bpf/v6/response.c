@@ -31,6 +31,19 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 
+
+static __be32 pseudo_header(struct ipv6hdr *ip, __u16 probe_len, __u8 protocol)
+{
+    __be32 pseudo_hdr = bpf_htons(probe_len);
+
+    for (int i = 0; i < 8; i++) {
+        pseudo_hdr += ip->daddr.in6_u.u6_addr16[i];
+        pseudo_hdr += ip->saddr.in6_u.u6_addr16[i];
+    }
+    pseudo_hdr += bpf_htons(protocol);
+
+    return pseudo_hdr;
+}
 static void response_init_eth_ip(struct ethhdr *eth, struct ipv6hdr *ip,
                                  struct in6_addr from, struct in6_addr to)
 {
@@ -45,7 +58,7 @@ static void response_init_eth_ip(struct ethhdr *eth, struct ipv6hdr *ip,
 
 static void response_init_icmp(struct session_key *session,
                                struct icmp6hdr *icmp, union trhdr *tr,
-                               struct trhdr_payload *payload, probe_error error)
+                               struct trhdr_payload *payload ,probe_error error)
 {
     icmp->icmp6_type = ICMPV6_ECHO_REPLY;
     icmp->icmp6_code = 1;
@@ -60,8 +73,6 @@ static void response_init_icmp(struct session_key *session,
     if (payload)
         payload_len += sizeof(*payload);
 
-    icmp->icmp6_cksum = 0;
-    icmp->icmp6_cksum = csum(icmp, payload_len, 0);
 }
 
 INTERNAL int response_create_err(struct cursor *cursor,
@@ -86,6 +97,9 @@ INTERNAL int response_create_err(struct cursor *cursor,
 
     response_init_eth_ip(*eth, *ip, source_addr, dest_addr);
     response_init_icmp(session, icmp, tr, NULL, error);
+
+    icmp->icmp6_cksum = 0;
+    icmp->icmp6_cksum = csum(icmp, payload_len, pseudo_header(*ip, payload_len, IPPROTO_ICMPV6));
 
     return 0;
 }
@@ -125,5 +139,7 @@ INTERNAL int response_create(struct cursor *cursor, struct session_key *session,
     response_init_eth_ip(*eth, *ip, source_addr, dest_addr);
     response_init_icmp(session, icmp, tr, payload, 0);
 
+    icmp->icmp6_cksum = 0;
+    icmp->icmp6_cksum = csum(icmp, payload_len, pseudo_header(*ip, payload_len, IPPROTO_ICMPV6));
     return 0;
 }
