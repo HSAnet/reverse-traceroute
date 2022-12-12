@@ -65,10 +65,10 @@ static int probe_match_icmp(struct cursor *cursor, __u8 is_request)
         return -1;
 
     if (is_request) {
-        if (!(icmp->icmp6_type == 8 && icmp->icmp6_code == 0))
+        if (!(icmp->icmp6_type == 128 && icmp->icmp6_code == 0))
             return -1;
     } else {
-        if (!(icmp->icmp6_type == 0 && icmp->icmp6_code == 0))
+        if (!(icmp->icmp6_type == 129 && icmp->icmp6_code == 0))
             return -1;
     }
 
@@ -151,14 +151,15 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
     if (PARSE(cursor, &payload) < 0)
         return -1;
 
-    icmp->icmp6_type = ICMPV6_ECHO_REPLY;
+    icmp->icmp6_type = ICMPV6_ECHO_REQUEST;
     icmp->icmp6_code = 0;
     icmp->icmp6_cksum = probe->flow ? probe->flow : bpf_htons(0xbeaf);
     icmp->icmp6_dataun.u_echo.sequence = probe->identifier;
     icmp->icmp6_dataun.u_echo.identifier = SOURCE_PORT;
 
     *payload = 0xffffffff - bpf_htons(((__u16)icmp->icmp6_type << 8) + icmp->icmp6_code) -
-               icmp->icmp6_cksum - icmp->icmp6_dataun.u_echo.identifier - icmp->icmp6_dataun.u_echo.sequence;
+               icmp->icmp6_cksum - icmp->icmp6_dataun.u_echo.identifier - icmp->icmp6_dataun.u_echo.sequence -
+               pseudo_header(*ip, sizeof(*icmp) + sizeof(*payload), IPPROTO_ICMPV6);
 
     return ERR_NONE;
 }
@@ -257,7 +258,7 @@ INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request)
         return probe_match_tcp(cursor, is_request);
     case IPPROTO_UDP:
         return probe_match_udp(cursor, is_request);
-    case IPPROTO_ICMP:
+    case IPPROTO_ICMPV6:
         return probe_match_icmp(cursor, is_request);
     default:
         return -1;
