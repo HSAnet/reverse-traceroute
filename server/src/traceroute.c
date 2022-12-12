@@ -136,10 +136,10 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 
 static int log_message(void *ctx, void *data, size_t size)
 {
-    char address[INET_ADDRSTRLEN];
+    char address[INET6_ADDRSTRLEN];
 
     struct message *msg = data;
-    if (!inet_ntop(AF_INET, &msg->data.address, address, sizeof(address)))
+    if (!inet_ntop(msg->data.address_family, &msg->data.addr, address, sizeof(address)))
         return 0;
 
     printf("[%*s, %5u] | ", INET_ADDRSTRLEN, address, msg->data.probe_id);

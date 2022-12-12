@@ -22,14 +22,12 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include "proto.h"
 #include "response.h"
 #include "session.h"
+#include "ip_generic.h"
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 #include <linux/bpf.h>
-#include <linux/icmpv6.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
-#include <linux/in.h>
-#include <linux/ipv6.h>
 #include <linux/pkt_cls.h>
 
 /*
@@ -39,25 +37,25 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
  * invalid configuration is dispatched.
  */
 static int handle_request(struct cursor *cursor, struct ethhdr **eth,
-                          struct ipv6hdr **ip, struct icmp6hdr **icmp)
+                          iphdr_t **ip, struct icmphdr **icmp)
 {
     int err;
     union trhdr *tr;
     struct probe_args probe_args;
 
-    struct session_key session = {.padding={0,0}};
+    struct session_key session = {.padding = 0};
     struct session_state state = {.timestamp_ns = bpf_ktime_get_ns()};
 
     if (PARSE(cursor, &tr) < 0)
         return TC_ACT_UNSPEC;
 
     session.addr = (*ip)->saddr;
-    session.identifier = (*icmp)->icmp6_dataun.u_echo.identifier;
+    session.identifier = (*icmp)->un.echo.id;
 
     probe_args.ttl = tr->request.ttl;
     probe_args.proto = tr->request.proto;
     probe_args.probe.flow = tr->request.flow;
-    probe_args.probe.identifier = (*icmp)->icmp6_dataun.u_echo.identifier;
+    probe_args.probe.identifier = (*icmp)->un.echo.id;
 
     if ((err = probe_create(cursor, &probe_args, eth, ip)) < 0)
         return TC_ACT_SHOT;
@@ -74,7 +72,7 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
 }
 
 static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
-                               struct ipv6hdr **ip)
+                               iphdr_t **ip)
 {
     if (bpf_clone_redirect(cursor->skb, cursor->skb->ifindex, BPF_F_INGRESS) <
         0)
@@ -102,13 +100,13 @@ static int handle(struct cursor *cursor)
     __u8 proto;
     __u8 is_request;
 
-    struct session_key session = {.padding={0,0}};
+    struct session_key session = {.padding = 0};
     struct session_state *state;
 
     struct cursor l3_cursor;
 
     struct ethhdr *eth;
-    struct ipv6hdr *ip;
+    iphdr_t *ip;
 
     if (PARSE(cursor, &eth) < 0)
         goto no_match;
@@ -119,10 +117,10 @@ static int handle(struct cursor *cursor)
     // These will be overwritten if a nested ICMP-packet is received.
     is_request = 0;
     session.addr = ip->saddr;
-    proto = ip->nexthdr;
+    proto = IP_NEXTHDR(*ip)
 
-    if (proto == IPPROTO_ICMPV6) {
-        struct icmp6hdr *icmp;
+    if (proto == G_PROTO_ICMP) {
+        struct icmphdr *icmp;
 
         // Clone the cursor before parsing the ICMP-header.
         // It may be reset to this position later.
@@ -131,14 +129,14 @@ static int handle(struct cursor *cursor)
         if (PARSE(cursor, &icmp) < 0)
             goto no_match;
 
-        if (icmp->icmp6_type == ICMPV6_ECHO_REQUEST && icmp->icmp6_code == 1) {
+        if (icmp->type == G_ICMP_ECHO_REQUEST && icmp->code == 1) {
             return handle_request(cursor, &eth, &ip, &icmp);
-        } else if ((icmp->icmp6_type == ICMPV6_TIME_EXCEED && icmp->icmp6_code == 0) || icmp->icmp6_type == ICMPV6_DEST_UNREACH) {
-            struct ipv6hdr *inner_ip;
+        } else if ((icmp->type == G_ICMP_TIME_EXCEEDED && icmp->code == 0) || icmp->type == G_ICMP_DEST_UNREACH) {
+            iphdr_t *inner_ip;
             if ((ret = PARSE_IP(cursor, &inner_ip)) < 0)
                 goto no_match;
 
-            proto = inner_ip->nexthdr;
+            proto = IP_NEXTHDR(*inner_ip)
             session.addr = inner_ip->daddr;
             is_request = 1;
         } else {
@@ -201,7 +199,7 @@ int prog(struct __sk_buff *skb)
     struct cursor cursor;
     cursor_init(&cursor, skb);
 
-    if (bpf_ntohs(skb->protocol) == ETH_P_IPV6)
+    if (bpf_ntohs(skb->protocol) == G_ETH_P_IP)
         return handle(&cursor);
 
     return TC_ACT_UNSPEC;

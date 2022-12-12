@@ -17,34 +17,20 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef SWAP_ADDR_H
-#define SWAP_ADDR_H
+#ifndef RESPONSE_H
+#define RESPONSE_H
 
+#include "internal.h"
+#include "probe.h"
+#include "session.h"
+#include "ip_generic.h"
 #include <linux/if_ether.h>
-#include <linux/ip.h>
-#include <linux/ipv6.h>
-#include <linux/types.h>
 
-static void swap_addr_ethhdr(struct ethhdr *ethhdr)
-{
-    for (int i = 0; i < ETH_ALEN; i++) {
-        __u8 byte = ethhdr->h_dest[i];
-        ethhdr->h_dest[i] = ethhdr->h_source[i];
-        ethhdr->h_source[i] = byte;
-    }
-}
-
-static void swap_addr_iphdr(struct iphdr *iphdr)
-{
-    __be32 tmp_ip = iphdr->saddr;
-    iphdr->saddr = iphdr->daddr;
-    iphdr->daddr = tmp_ip;
-}
-
-static void swap_addr(struct ethhdr *eth, struct iphdr *ip)
-{
-    swap_addr_ethhdr(eth);
-    swap_addr_iphdr(ip);
-}
+INTERNAL int response_create_err(struct cursor *cursor,
+                                 struct session_key *session, probe_error error,
+                                 struct ethhdr **eth, iphdr_t **ip);
+INTERNAL int response_create(struct cursor *cursor, struct session_key *session,
+                             struct session_state *state, struct ethhdr **eth,
+                             iphdr_t **ip);
 
 #endif

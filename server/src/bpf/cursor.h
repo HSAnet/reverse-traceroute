@@ -20,8 +20,8 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #ifndef CURSOR_H
 #define CURSOR_H
 
+#include "ip_generic.h"
 #include <linux/bpf.h>
-#include <linux/ip.h>
 
 struct cursor {
     struct __sk_buff *skb;
@@ -68,11 +68,12 @@ static void cursor_clone(struct cursor *original, struct cursor *clone)
     })
 
 // Parses the IP header including any following options.
-static int PARSE_IP(struct cursor *cursor, struct iphdr **hdr)
+static int PARSE_IP(struct cursor *cursor, iphdr_t **hdr)
 {
     if (PARSE(cursor, hdr) < 0)
         return -1;
 
+#if defined(TRACEROUTE_V4)
     long new_pos = (long)(*hdr) + (**hdr).ihl * 4;
     if (new_pos <= cursor_end(cursor)) {
         cursor->pos = (void *)new_pos;
@@ -80,5 +81,7 @@ static int PARSE_IP(struct cursor *cursor, struct iphdr **hdr)
     }
 
     return -1;
+#endif
 }
+
 #endif

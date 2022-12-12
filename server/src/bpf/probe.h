@@ -17,17 +17,39 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef RESIZE_H
-#define RESIZE_H
+#ifndef PROBE_H
+#define PROBE_H
 
 #include "cursor.h"
 #include "internal.h"
+#include "ip_generic.h"
 #include <linux/if_ether.h>
 #include <linux/ip.h>
-#include <linux/ipv6.h>
 #include <linux/types.h>
 
-INTERNAL int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
-                          struct ethhdr **eth, struct iphdr **ip);
+#define SOURCE_PORT bpf_htons(1021)
+
+struct probe {
+    __be16 flow;
+    __be16 identifier;
+};
+
+struct probe_args {
+    __u8 ttl;
+    __u8 proto;
+
+    struct probe probe;
+};
+
+typedef enum {
+    ERR_NONE = 0x00,
+    ERR_TTL = 0x01,
+    ERR_PROTO = 0x02,
+    ERR_FLOW = 0x03,
+} probe_error;
+
+INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
+                          struct ethhdr **eth, iphdr_t **ip);
+INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request);
 
 #endif

@@ -18,18 +18,18 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "resize.h"
+#include <linux/types.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
-#include <linux/if_ether.h>
-#include <linux/ipv6.h>
-#include <linux/types.h>
 
 /*
  * Resizes the packet to be able to hold the specified length on top of the IPv4
  * header, all options are truncated.
  */
 INTERNAL int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
-                          struct ethhdr **eth, struct ipv6hdr **ip)
+                          struct ethhdr **eth, iphdr_t **ip)
 {
     int ret = bpf_skb_change_tail(cursor->skb,
                                   sizeof(**eth) + sizeof(**ip) + probe_len, 0);
@@ -43,7 +43,12 @@ INTERNAL int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
     if (PARSE(cursor, ip) < 0)
         return -1;
 
-    (**ip).payload_len = bpf_htons(cursor->skb->len - sizeof(**eth) - sizeof(**ip));
+#if defined(TRACEROUTE_V4)
+    (**ip).ihl = 5;
+    (**ip).tot_len = bpf_htons(cursor->skb->len - sizeof(**eth));
+#elif defined(TRACEROUTE_V6)
+    (**ip).payload_len = bpf_htons(probe_len);
+#endif
 
     return 0;
 }

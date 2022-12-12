@@ -17,30 +17,35 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef CSUM_H
-#define CSUM_H
+#ifndef SWAP_ADDR_H
+#define SWAP_ADDR_H
 
+#include "ip_generic.h"
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
 #include <linux/types.h>
 
-// Computes the checksum. See RFC1071 for details.
-static __sum16 csum(void *cursor, __u16 len, __be32 seed)
+static void swap_addr_ethhdr(struct ethhdr *ethhdr)
 {
-    __be32 sum = seed;
-    __be16 *pos = cursor;
-
-    while (len > 1) {
-        sum += *(pos++);
-        len -= 2;
+    for (int i = 0; i < ETH_ALEN; i++) {
+        __u8 byte = ethhdr->h_dest[i];
+        ethhdr->h_dest[i] = ethhdr->h_source[i];
+        ethhdr->h_source[i] = byte;
     }
+}
 
-    if (len > 0)
-        sum += *pos;
+static void swap_addr_iphdr(iphdr_t *iphdr)
+{
+    ipaddr_t tmp_ip = iphdr->saddr;
+    iphdr->saddr = iphdr->daddr;
+    iphdr->daddr = tmp_ip;
+}
 
-    // Fold the recorded carry-outs back into the 16-bit sum.
-    sum = (sum & 0xffff) + (sum >> 16);
-    sum = (sum & 0xffff) + (sum >> 16);
-
-    return (__sum16)~sum;
+static void swap_addr(struct ethhdr *eth, iphdr_t *ip)
+{
+    swap_addr_ethhdr(eth);
+    swap_addr_iphdr(ip);
 }
 
 #endif

@@ -1,4 +1,4 @@
-BPF_DIR := $(abspath bpf)/v6
+BPF_DIR := $(abspath bpf)
 BPF_PROG := $(BPF_DIR)/traceroute.o
 
 OUTDIR := .
@@ -20,7 +20,7 @@ $(BPF_PROG): $(patsubst %.c,%.bc, $(wildcard $(BPF_DIR)/*.c))
 	llc-14 -filetype obj $(BPF_PROG).bc -o $@
 
 $(BPF_DIR)/%.bc: $(BPF_DIR)/%.c | $(LIBBPF)
-	clang-14 -emit-llvm -target bpf -g $(INCLUDES) -O2 -Wall -c $< -o $@
+	clang-14 -emit-llvm -target bpf -D TRACEROUTE_V6 -g $(INCLUDES) -O2 -Wall -c $< -o $@
 
 clean::
 	-find . -type f -name *.o -delete

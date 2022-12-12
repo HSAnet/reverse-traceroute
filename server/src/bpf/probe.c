@@ -21,30 +21,13 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include "csum.h"
 #include "resize.h"
 #include "swap_addr.h"
+#include "ip_generic.h"
+#include "pseudohdr.h"
 #include <bpf/bpf_endian.h>
 #include <linux/bpf.h>
-#include <linux/icmp.h>
-#include <linux/icmpv6.h>
-#include <linux/if_ether.h>
-#include <linux/in.h>
-#include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
 
-/*
- * Computes the pseudo header checksum for IPv4 based on the packet length and
- * protocol.
- */
-static __be32 pseudo_header(struct iphdr *ip, __u16 probe_len, __u8 protocol)
-{
-    __be32 pseudo_hdr = bpf_htons(probe_len);
-
-    pseudo_hdr += (__be16)(ip->saddr) + (__be16)(ip->saddr >> 16);
-    pseudo_hdr += (__be16)(ip->daddr) + (__be16)(ip->daddr >> 16);
-    pseudo_hdr += bpf_htons(protocol);
-
-    return pseudo_hdr;
-}
 
 /*
  * Checks if the ICMP packet MAY be an answer to a probe.
@@ -64,10 +47,10 @@ static int probe_match_icmp(struct cursor *cursor, __u8 is_request)
         return -1;
 
     if (is_request) {
-        if (!(icmp->type == 8 && icmp->code == 0))
+        if (!(icmp->type == G_ICMP_ECHO_REQUEST && icmp->code == 0))
             return -1;
     } else {
-        if (!(icmp->type == 0 && icmp->code == 0))
+        if (!(icmp->type == G_ICMP_ECHO_REPLY && icmp->code == 0))
             return -1;
     }
 
@@ -138,7 +121,7 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request)
  * values on an invalid configuration.
  */
 static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
-                                  struct ethhdr **eth, struct iphdr **ip)
+                                  struct ethhdr **eth, iphdr_t **ip)
 {
     struct icmphdr *icmp;
     __be32 *payload;
@@ -156,8 +139,15 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
     icmp->un.echo.sequence = probe->identifier;
     icmp->un.echo.id = SOURCE_PORT;
 
+#if defined(TRACEROUTE_V4)
+    __be32 seed = 0;
+#elif defined(TRACEROUTE_V6)
+    __be32 seed = pseudo_header(*ip, sizeof(*icmp) + sizeof(*payload), G_PROTO_ICMP);
+#endif
+
     *payload = 0xffffffff - bpf_htons(((__u16)icmp->type << 8) + icmp->code) -
-               icmp->checksum - icmp->un.echo.id - icmp->un.echo.sequence;
+               icmp->checksum - icmp->un.echo.id - icmp->un.echo.sequence -
+               seed;
 
     return ERR_NONE;
 }
@@ -168,7 +158,7 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
  * values on an invalid configuration.
  */
 static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
-                                 struct ethhdr **eth, struct iphdr **ip)
+                                 struct ethhdr **eth, iphdr_t **ip)
 {
     struct udphdr *udp;
     __be32 *payload;
@@ -200,7 +190,7 @@ static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
  * values on an invalid configuration.
  */
 static probe_error probe_set_tcp(struct cursor *cursor, struct probe *probe,
-                                 struct ethhdr **eth, struct iphdr **ip)
+                                 struct ethhdr **eth, iphdr_t **ip)
 {
     struct tcphdr *tcp;
     struct {
@@ -256,7 +246,7 @@ INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request)
         return probe_match_tcp(cursor, is_request);
     case IPPROTO_UDP:
         return probe_match_udp(cursor, is_request);
-    case IPPROTO_ICMP:
+    case G_PROTO_ICMP:
         return probe_match_icmp(cursor, is_request);
     default:
         return -1;
@@ -269,18 +259,19 @@ INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request)
  * positive value on an invalid probe configuration.
  */
 INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
-                          struct ethhdr **eth, struct iphdr **ip)
+                          struct ethhdr **eth, iphdr_t **ip)
 {
     int ret;
     struct probe *probe = &args->probe;
 
     if (args->ttl == 0)
         return ERR_TTL;
+    if (args->proto == 0)
+        args->proto = G_PROTO_ICMP;
 
     switch (args->proto) {
     // In case of 0 we MUST use a suitable default value.
-    case 0:
-    case IPPROTO_ICMP:
+    case G_PROTO_ICMP:
         ret = probe_set_icmp(cursor, probe, eth, ip);
         break;
     case IPPROTO_UDP:
@@ -296,11 +287,15 @@ INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
     if (ret != ERR_NONE)
         return ret;
 
+#if defined(TRACEROUTE_V4)
     (**ip).protocol = args->proto;
     (**ip).ttl = args->ttl;
     (**ip).check = 0;
     (**ip).check = csum(*ip, sizeof(**ip), 0);
-
+#elif defined(TRACEROUTE_V6)
+    (**ip).nexthdr = args->proto;
+    (**ip).hop_limit = args->ttl;
+#endif
     // Swap addresses.
     swap_addr(*eth, *ip);
 

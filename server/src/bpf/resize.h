@@ -17,13 +17,16 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef LOGGING_H
-#define LOGGING_H
+#ifndef RESIZE_H
+#define RESIZE_H
 
-#include "../../messages.h"
 #include "internal.h"
-#include "session.h"
+#include "ip_generic.h"
+#include "cursor.h"
+#include <linux/types.h>
+#include <linux/if_ether.h>
 
-INTERNAL void log_message(enum message_type type, struct session_key *key);
+INTERNAL int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
+                          struct ethhdr **eth, iphdr_t **ip);
 
 #endif
