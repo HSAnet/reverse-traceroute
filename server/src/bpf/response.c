@@ -56,7 +56,7 @@ static void response_init_icmp(struct session_key *session,
                                struct icmphdr *icmp, union trhdr *tr,
                                struct trhdr_payload *payload, probe_error error)
 {
-    icmp->type = 0;
+    icmp->type = G_ICMP_ECHO_REPLY;
     icmp->code = 1;
     icmp->un.echo.id = session->identifier;
     icmp->un.echo.sequence = 0;

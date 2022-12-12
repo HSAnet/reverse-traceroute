@@ -133,7 +133,7 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
     if (PARSE(cursor, &payload) < 0)
         return -1;
 
-    icmp->type = 8;
+    icmp->type = G_ICMP_ECHO_REQUEST;
     icmp->code = 0;
     icmp->checksum = probe->flow ? probe->flow : bpf_htons(0xbeaf);
     icmp->un.echo.sequence = probe->identifier;

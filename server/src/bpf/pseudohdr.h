@@ -17,7 +17,6 @@ static __be32 pseudo_header(iphdr_t *ip, __u16 probe_len, __u8 protocol)
 #if defined(TRACEROUTE_V4)
     pseudo_hdr += (__be16)(ip->saddr) + (__be16)(ip->saddr >> 16);
     pseudo_hdr += (__be16)(ip->daddr) + (__be16)(ip->daddr >> 16);
-    pseudo_hdr += bpf_htons(protocol);
 #elif defined(TRACEROUTE_V6)
     for (int i = 0; i < 8; i++) {
         pseudo_hdr += ip->daddr.in6_u.u6_addr16[i];    
@@ -25,6 +24,7 @@ static __be32 pseudo_header(iphdr_t *ip, __u16 probe_len, __u8 protocol)
     }
 #endif
 
+    pseudo_hdr += bpf_htons(protocol);
     return pseudo_hdr;
 }
 

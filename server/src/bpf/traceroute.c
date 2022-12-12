@@ -117,7 +117,7 @@ static int handle(struct cursor *cursor)
     // These will be overwritten if a nested ICMP-packet is received.
     is_request = 0;
     session.addr = ip->saddr;
-    proto = IP_NEXTHDR(*ip)
+    proto = IP_NEXTHDR(*ip);
 
     if (proto == G_PROTO_ICMP) {
         struct icmphdr *icmp;
@@ -136,7 +136,7 @@ static int handle(struct cursor *cursor)
             if ((ret = PARSE_IP(cursor, &inner_ip)) < 0)
                 goto no_match;
 
-            proto = IP_NEXTHDR(*inner_ip)
+            proto = IP_NEXTHDR(*inner_ip);
             session.addr = inner_ip->daddr;
             is_request = 1;
         } else {

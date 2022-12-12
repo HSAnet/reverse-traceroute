@@ -81,6 +81,8 @@ static int PARSE_IP(struct cursor *cursor, iphdr_t **hdr)
     }
 
     return -1;
+#elif defined(TRACEROUTE_V6)
+    return 0;
 #endif
 }
 
