@@ -1,6 +1,8 @@
 # Reverse Traceroute
-This repository contains reference implementations for reverse traceroute client and server applications.  
+Reverse traceroute is an extension to ICMP, enabling hosts to request traceroute measurements back to themselves from a remote target.  
+For detailed information about reverse traceroute and its concepts, have a look at the [resources](#resources).
 
+This repository contains reference implementations for reverse traceroute client and server applications.  
 Altough the protocol itself is able to support both IPv4 and IPv6 implementations,
 this work currently only runs on IPv4.
 
@@ -134,6 +136,12 @@ Note that you have to replace `<ifname>` with the name of the interface
 the server should run on.
 
 ## Building the software
+This repository includes dependencies in the form of git submodules,
+which must be initialized before the software can be built.  
+To initialize said submodules when cloning the repository, run:
+```
+git clone --recurse-submodules https://github.com/HSAnet/reverse-traceroute
+```
 ### Client
 In order to build the client [Poetry](https://python-poetry.org/docs/) has to be installed.
 In the `client/` directory run:
@@ -141,9 +149,9 @@ In the `client/` directory run:
 poetry build -f wheel
 ```
 The built package can be found in the `dist/` subdirectory.
-To install the built client, run:
+To install the built client globally, run:
 ```
-pip3 install dist/<package-name>.whl
+sudo pip3 install dist/<package-name>.whl
 ```
 Make sure to replace `<package-name>` with the actual name of the package.
 

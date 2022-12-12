@@ -23,7 +23,8 @@ from ipaddress import IPv4Address
 from concurrent.futures import ThreadPoolExecutor
 
 from scapy.sendrecv import sr1
-from scapy.route import conf
+from scapy.route import conf as route_conf
+from scapy.config import conf as scapy_conf
 import graphviz
 
 from .core.engine import SinglepathEngine, MultipathEngine
@@ -35,6 +36,17 @@ from .transmit import transmit_measurement
 
 
 logging.getLogger("graphviz").setLevel(logging.ERROR)
+
+# Issue each warning exactly once
+scapy_conf.warning_threshold = float("inf")
+# Do not propagate any scapy logs to the root logger to avoid duplicates
+if logging.getLogger("scapy").hasHandlers():
+    logging.getLogger("scapy").propagate = False
+# Filter all scapy messages starting with "more"
+logging.getLogger("scapy.runtime").addFilter(
+    lambda record: 0 if record.msg.startswith("more") else 1
+)
+
 log = logging.getLogger(__name__)
 
 
@@ -139,7 +151,7 @@ def main():
 
     traces = {}
 
-    outgoing_ip = conf.route.route(target)[1]
+    outgoing_ip = route_conf.route.route(target)[1]
     if args.direction == "two-way" or args.direction == "forward":
         probe_gen = ClassicTraceroute(target, proto)
         first_hop = outgoing_ip
