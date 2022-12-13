@@ -64,11 +64,6 @@ static void response_init_icmp(struct session_key *session,
     tr->response.state = error;
     tr->response.err_msg_len = 0;
     tr->response.reserved = 0;
-
-    __u16 payload_len = sizeof(*icmp) + sizeof(*tr);
-    if (payload)
-        payload_len += sizeof(*payload);
-
 }
 
 INTERNAL int response_create_err(struct cursor *cursor,

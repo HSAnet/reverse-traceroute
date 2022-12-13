@@ -18,7 +18,7 @@ typedef __be32 ipaddr_t;
 #define G_ICMP_TIME_EXCEEDED    ICMP_TIME_EXCEEDED
 #define G_ICMP_DEST_UNREACH     ICMP_DEST_UNREACH
 
-#define IP_NEXTHDR(x) (x).protocol;
+#define IP_NEXTHDR(x) (x).protocol
 
 #elif defined(TRACEROUTE_V6)
 
@@ -34,7 +34,7 @@ typedef struct in6_addr ipaddr_t;
 #define G_ICMP_TIME_EXCEEDED    ICMPV6_TIME_EXCEED
 #define G_ICMP_DEST_UNREACH     ICMPV6_DEST_UNREACH
 
-#define IP_NEXTHDR(x) (x).nexthdr;
+#define IP_NEXTHDR(x) (x).nexthdr
 
 #else
 #error "No address family defined. Specify TRACEROUTE_V4|TRACEROUTE_V6."

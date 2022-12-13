@@ -1,11 +1,12 @@
-BIN := $(abspath bin)
+BASE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+BIN := $(BASE_DIR)bin
 
-LIBBPF_DIR := ../libbpf
+LIBBPF_DIR := $(BASE_DIR)../libbpf
 LIBBPF_SRC_DIR := $(LIBBPF_DIR)/src
 LIBBPF_OUT_DIR := $(BIN)/libbpf
 LIBBPF := $(LIBBPF_OUT_DIR)/libbpf.a
 
-BPFTOOL_DIR := ../bpftool
+BPFTOOL_DIR := $(BASE_DIR)../bpftool
 BPFTOOL_SRC_DIR := $(BPFTOOL_DIR)/src
 BPFTOOL_OUT_DIR := $(BIN)/bpftool
 BPFTOOL := $(BPFTOOL_OUT_DIR)/bpftool

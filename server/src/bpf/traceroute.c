@@ -57,6 +57,7 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     probe_args.probe.flow = tr->request.flow;
     probe_args.probe.identifier = (*icmp)->un.echo.id;
 
+
     if ((err = probe_create(cursor, &probe_args, eth, ip)) < 0)
         return TC_ACT_SHOT;
 
