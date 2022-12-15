@@ -29,6 +29,15 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <sys/resource.h>
 #include <unistd.h>
 #include <net/if.h>
+#include <fcntl.h>
+
+#if defined(TRACEROUTE_V4)
+    #define FILTER_HANDLE 0xbeaf4
+#elif defined(TRACEROUTE_V6)
+    #define FILTER_HANDLE 0xbeaf6
+#endif
+
+#define FILTER_PRIO     1
 
 struct args {
     int ifindex;      // Always specified by the user
@@ -136,13 +145,20 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 
 static int log_message(void *ctx, void *data, size_t size)
 {
-    char address[INET6_ADDRSTRLEN];
-
     struct message *msg = data;
-    if (!inet_ntop(msg->data.address_family, &msg->data.addr, address, sizeof(address)))
+
+#if defined(TRACEROUTE_V4)
+    char address[INET_ADDRSTRLEN];
+    int af = AF_INET;
+#elif defined(TRACEROUTE_V6)
+    char address[INET6_ADDRSTRLEN];
+    int af = AF_INET6;
+#endif
+
+    if (!inet_ntop(af, &msg->data.address, address, sizeof(address)))
         return 0;
 
-    printf("[%*s, %5u] | ", INET_ADDRSTRLEN, address, msg->data.probe_id);
+    printf("[%*s, %5u] | ", sizeof(address), address, msg->data.probe_id);
     switch (msg->type) {
     case SESSION_CREATED:
         printf("session created.");
@@ -193,11 +209,10 @@ int main(int argc, char **argv)
 
     DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .ifindex = args.ifindex,
                         .attach_point = BPF_TC_INGRESS);
-    DECLARE_LIBBPF_OPTS(bpf_tc_opts, opts, .handle = 1, .priority = 1,
+    DECLARE_LIBBPF_OPTS(bpf_tc_opts, opts, .handle=FILTER_HANDLE, .priority=FILTER_PRIO,
                         .prog_fd = bpf_program__fd(tr->progs.prog));
 
-    if (bpf_tc_hook_create(&hook) < 0)
-        goto exit;
+    bpf_tc_hook_create(&hook);
     if (bpf_tc_attach(&hook, &opts) < 0)
         goto destroy;
 
@@ -226,15 +241,14 @@ int main(int argc, char **argv)
             break;
         }
     }
+    ring_buffer__free(log_buf);
+
 
     ret = EXIT_SUCCESS;
-    ring_buffer__free(log_buf);
 detach:
     opts.flags = opts.prog_fd = opts.prog_id = 0;
     bpf_tc_detach(&hook, &opts);
 destroy:
-    hook.attach_point = BPF_TC_INGRESS | BPF_TC_EGRESS;
-    bpf_tc_hook_destroy(&hook);
     traceroute__destroy(tr);
 exit:
     return ret;

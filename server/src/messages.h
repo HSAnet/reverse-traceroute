@@ -35,12 +35,11 @@ enum message_type {
 struct message {
     enum message_type type;
     struct {
-        sa_family_t address_family;
-        union {
-            __be32 addr4;
-            struct in6_addr addr6;
-        } addr;
-
+#if defined(TRACEROUTE_V4)
+        __be32 address;
+#elif defined(TRACEROUTE_V6)
+        struct in6_addr address;
+#endif
         __be32 probe_id;
     } data;
 };

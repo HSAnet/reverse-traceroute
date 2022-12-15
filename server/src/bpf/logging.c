@@ -31,21 +31,13 @@ INTERNAL void log_message(enum message_type type, struct session_key *key)
 {
     struct message *msg =
         bpf_ringbuf_reserve(&log_buf, sizeof(struct message), 0);
+
     if (!msg)
         return;
+
     msg->type = type;
     msg->data.probe_id = bpf_ntohs(key->identifier);
-
-#if defined(TRACEROUTE_V4)
-    msg->data.address_family = AF_INET;
-    msg->data.addr.addr4 = key->addr;
-    // As no arithmetic is performed on the identifier,
-    // it is stored in network byte order in the session key.
-    // For presentation we must convert it to the hosts byte order.
-#elif defined(TRACEROUTE_V6)
-    msg->data.address_family = AF_INET6;
-    msg->data.addr.addr6 = key->addr;
-#endif
+    msg->data.address = key->addr;
 
     bpf_ringbuf_submit(msg, 0);
 }

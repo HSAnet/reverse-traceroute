@@ -47,7 +47,7 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     struct session_state state = {.timestamp_ns = bpf_ktime_get_ns()};
 
     if (PARSE(cursor, &tr) < 0)
-        return TC_ACT_UNSPEC;
+        return TC_ACT_OK;
 
     session.addr = (*ip)->saddr;
     session.identifier = (*icmp)->un.echo.id;
@@ -181,7 +181,7 @@ static int handle(struct cursor *cursor)
 
 // Jump here if packet has not been changed.
 no_match:
-    return TC_ACT_UNSPEC;
+    return TC_ACT_OK;
 // Jump here if packet has been changed.
 exit:
     return TC_ACT_SHOT;

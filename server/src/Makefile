@@ -8,6 +8,7 @@ suffix := v6
 endif
 
 BUILD_DIR := $(abspath build)/$(suffix)
+BPF_BUILD_DIR := $(BUILD_DIR)/bpf
 BPF_PROG := $(BUILD_DIR)/traceroute.o
 SKELETON_DIR := $(BUILD_DIR)/include
 skeleton := $(SKELETON_DIR)/traceroute.skel.h
@@ -25,18 +26,19 @@ include tools.mk
 .PHONY: server
 server: $(server)
 $(server): traceroute.c $(skeleton) | $(LIBBPF)
-	clang-14 -Wall traceroute.c $(LIBBPF) $(INCLUDES) -I$(SKELETON_DIR) -o $@ -lelf -lz -static
+	clang-14 -Wall traceroute.c $(LIBBPF) $(INCLUDES) -I$(SKELETON_DIR) -D$(TRACEROUTE_AF) -o $@ -lelf -lz -static
 
 $(skeleton): $(BPF_PROG) | $(BPFTOOL) $(SKELETON_DIR)
 	$(BPFTOOL) gen skeleton $(BPF_PROG) > $@
 
-$(SKELETON_DIR):
-	mkdir -p $@
+$(BPF_PROG): $(addprefix $(BPF_BUILD_DIR)/,$(patsubst %.c,%.bc, $(notdir $(wildcard $(BPF_DIR)/*.c))))
+	llvm-link-14 $^ | llc-14 -filetype obj -o $@
 
-export INCLUDES
-.PHONY: $(BPF_PROG)
-$(BPF_PROG): | $(LIBBPF)
-	$(MAKE) -C $(BPF_DIR) BUILD_DIR=$(BUILD_DIR)/bpf BPF_PROG=$(BPF_PROG) TRACEROUTE_AF=$(TRACEROUTE_AF) bpf_prog
+$(BPF_BUILD_DIR)/%.bc: $(BPF_DIR)/%.c | $(BPF_BUILD_DIR) $(LIBBPF)
+	clang-14 -emit-llvm -target bpf -D$(TRACEROUTE_AF) -g $(INCLUDES) -O2 -Wall -c $< -o $@
+
+$(BUILD_DIR) $(BPF_BUILD_DIR) $(SKELETON_DIR):
+	mkdir -p $@
 
 clean::
 	-rm -r build
