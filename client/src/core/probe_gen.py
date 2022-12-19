@@ -16,26 +16,31 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 
 import itertools
-import socket
 import struct
+import socket
 import os
+import functools
 from collections import namedtuple
+from ipaddress import ip_address, IPv4Address, IPv6Address
 from scapy.packet import Packet
 from scapy.layers.inet import IP, ICMP, TCP, UDP, in4_chksum, checksum
+from scapy.layers.inet6 import IPv6, in6_chksum, ICMPv6EchoRequest, ICMPv6EchoReply
 from scapy.sendrecv import send
-from ipaddress import IPv4Address
-from random import randint
+
+# Overwrite scapy IPv6 matching behaviour to consider only id and seq fields, not the data
+ICMPv6EchoReply.answers = (
+    lambda self, other: self.id == other.id and self.seq == other.seq
+)
 
 TracerouteResult = namedtuple("TracerouteResult", ["address", "rtt"])
 
 
 class AbstractProbeGen:
     def __init__(self, target, protocol):
-        self.target = target
+        self.is_ipv4 = isinstance(ip_address(target), IPv4Address)
+        self.target = str(target)
         self.protocol = protocol
         self._probe_id = itertools.cycle(range(1, 0xFFFF + 1))
-        for _ in range(1, randint(1, 0xFFFF)):
-            next(self._probe_id)
 
     def create_probe(self, ttl: int, flow: int) -> Packet:
         raise NotImplementedError("Override this method in your subclass")
@@ -46,27 +51,45 @@ class AbstractProbeGen:
         raise NotImplementedError("Override this method in your subclass")
 
 
-class ClassicTraceroute(AbstractProbeGen):
+class ClassicProbeGen(AbstractProbeGen):
     """Implements classic traceroute functionality."""
 
-    def __init__(self, target: str, protocol: int):
+    def __init__(self, target: [IPv4Address | IPv6Address], protocol: int):
         super().__init__(target, protocol)
+        self.chksum = in4_chksum if self.is_ipv4 else in6_chksum
 
     def create_probe(self, ttl: int, flow: int) -> Packet:
         probe_id = next(self._probe_id)
-        ip = IP(dst=self.target, ttl=ttl)
+        ip = (
+            IP(dst=self.target, ttl=ttl)
+            if self.is_ipv4
+            else IPv6(dst=self.target, hlim=ttl)
+        )
 
-        if self.protocol == socket.IPPROTO_ICMP:
-            l3 = ICMP(
-                type=8, code=0, id=(os.getpid() % 0xFF) + 1, seq=probe_id, chksum=flow
-            ) / struct.pack("!H", 0)
-            l3.load = struct.pack("!H", checksum(bytes(l3)))
+        if self.protocol == "icmp":
+            if self.is_ipv4:
+                l3 = ICMP(
+                    type=8,
+                    code=0,
+                    id=(os.getpid() % 0xFF) + 1,
+                    seq=probe_id,
+                    chksum=flow,
+                ) / struct.pack("!H", 0)
+                l3.load = struct.pack("!H", checksum(bytes(l3)))
 
-        elif self.protocol == socket.IPPROTO_UDP:
+            else:
+                l3 = ICMPv6EchoRequest(
+                    code=0, id=(os.getpid() % 0xFF) + 1, seq=probe_id, chksum=flow
+                ) / struct.pack("!H", 0)
+                l3.load = struct.pack(
+                    "!H", self.chksum(socket.IPPROTO_ICMPV6, ip, bytes(l3))
+                )
+
+        elif self.protocol == "udp":
             l3 = UDP(dport=flow, sport=1021, chksum=probe_id) / struct.pack("!H", 0)
-            l3.load = struct.pack("!H", in4_chksum(self.protocol, ip, bytes(l3)))
+            l3.load = struct.pack("!H", self.chksum(socket.IPPROTO_UDP, ip, bytes(l3)))
 
-        elif self.protocol == socket.IPPROTO_TCP:
+        elif self.protocol == "tcp":
             l3 = TCP(dport=flow, sport=1021, seq=probe_id)
 
         return ip / l3
@@ -76,11 +99,10 @@ class ClassicTraceroute(AbstractProbeGen):
     ) -> TracerouteResult:
         address = response.src
         rtt = (response.time - request.sent_time) * 1000
-
         return TracerouteResult(address, rtt)
 
 
-class ReverseTraceroute(AbstractProbeGen):
+class ReverseProbeGen(AbstractProbeGen):
     """Implements reverse traceroute functionality."""
 
     class Error(Exception):
@@ -112,27 +134,42 @@ class ReverseTraceroute(AbstractProbeGen):
         super().__init__(target, protocol)
 
     def create_probe(self, ttl: int, flow: int) -> Packet:
+        protocol = {
+            "icmp": socket.IPPROTO_ICMP if self.is_ipv4 else socket.IPPROTO_ICMPV6,
+            "udp": socket.IPPROTO_UDP,
+            "tcp": socket.IPPROTO_TCP,
+        }[self.protocol]
+
         probe_id = next(self._probe_id)
-        header = struct.pack("!BBH", ttl, self.protocol, flow)
-        return IP(dst=self.target) / ICMP(type=8, code=1, id=probe_id, seq=0) / header
+        header = struct.pack("!BBH", ttl, protocol, flow)
+        if self.is_ipv4:
+            return (
+                IP(dst=self.target) / ICMP(type=8, code=1, id=probe_id, seq=0) / header
+            )
+        else:
+            return (
+                IPv6(dst=self.target)
+                / ICMPv6EchoRequest(code=1, id=probe_id, seq=0)
+                / header
+            )
 
     def parse_probe_response(
         self, request: Packet, response: Packet
     ) -> TracerouteResult:
-        if response.type == 0 and response.code == 1:
+        response_type = 0 if self.is_ipv4 else 129
+        if response.type == response_type and response.code == 1:
             try:
-                raw_data = response.getlayer("Raw")
-                if raw_data:
-                    load = raw_data.load
-                    status, _ = struct.unpack("BB", load[:2])
+                load = response.load if self.is_ipv4 else response.data
+                status, _ = struct.unpack("BB", load[:2])
 
-                    if status == 0x00:
-                        address, rtt = struct.unpack("!II", load[16:24])
-                        return TracerouteResult(
-                            str(IPv4Address(address)), rtt / 1000000
-                        )
-                    if status in self.STATUS_TO_EXCEPTION:
-                        raise self.STATUS_TO_EXCEPTION[status]
+                if status == 0x00:
+                    address, rtt = struct.unpack("!16sI", load[4:24])
+                    address = IPv6Address(address)
+                    if self.is_ipv4:
+                        address = address.ipv4_mapped
+                    return TracerouteResult(str(address), rtt / 1000000)
+                if status in self.STATUS_TO_EXCEPTION:
+                    raise self.STATUS_TO_EXCEPTION[status]
 
             # We receive this error when data cannot be unpacked due to a malformed response.
             # We assume a malformed response indicates the absence of a reverse traceroute server at the target.

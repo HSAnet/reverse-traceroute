@@ -16,10 +16,10 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 
 import logging
+import argparse
 import json
 import socket
-import argparse
-from ipaddress import IPv4Address
+from ipaddress import ip_address, IPv4Address, IPv6Address
 from concurrent.futures import ThreadPoolExecutor
 
 from scapy.sendrecv import sr1
@@ -27,8 +27,8 @@ from scapy.route import conf as route_conf
 from scapy.config import conf as scapy_conf
 import graphviz
 
-from .core.engine import SinglepathEngine, MultipathEngine
-from .core.probe_gen import ClassicTraceroute, ReverseTraceroute
+from .core.engine import AbstractEngine, SinglepathEngine, MultipathEngine
+from .core.probe_gen import AbstractProbeGen, ClassicProbeGen, ReverseProbeGen
 from .core.container import TracerouteVertex, BlackHoleVertex
 from .graph import create_graph
 from .args import parse_arguments
@@ -77,10 +77,27 @@ def create_measurement_args(args: argparse.Namespace) -> dict:
     }
 
 
+def create_measurement(
+    args: argparse.Namespace,
+    traces: dict[str, TracerouteVertex],
+    hostnames: dict[str, str],
+):
+    return {
+        **create_measurement_args(args),
+        "traces": {
+            # Store the measurement raw (not merged).
+            # Should the merge logic change in the future, past measurements remain valid.
+            direction: [v.to_dict() for v in trace.flatten()]
+            for direction, trace in traces.items()
+        },
+        "hostnames": hostnames,
+    }
+
+
 def resolve_hostnames(root: TracerouteVertex) -> dict[str, str]:
     """Map IP addresses to hostnames for a root vertex and its children."""
 
-    def resolve(address):
+    def resolve(address: str):
         import socket
 
         try:
@@ -104,40 +121,20 @@ def resolve_hostnames(root: TracerouteVertex) -> dict[str, str]:
     return resolve_table
 
 
-def prompt_confirm(prompt):
+def prompt_confirm(prompt: str):
     """Prints a prompt to stdout and asks for user confirmation [Yes/No]"""
     choice = input(prompt + "\nDo you want to proceed [Yes/No]: ").lower()
     return choice == "y" or choice == "yes"
 
 
-def main():
-    args = parse_arguments()
-    logging.basicConfig(
-        level={
-            "info": logging.INFO,
-            "debug": logging.DEBUG,
-            "warning": logging.WARNING,
-        }[args.log_level]
-    )
-    proto = {
-        "tcp": socket.IPPROTO_TCP,
-        "udp": socket.IPPROTO_UDP,
-        "icmp": socket.IPPROTO_ICMP,
-    }[args.protocol]
-
-    try:
-        target = str(IPv4Address(args.target))
-    except:
-        target = socket.gethostbyname(args.target)
-
+def create_probing_engine(args: argparse.Namespace):
     cls_args = {
         "inter": args.inter,
         "timeout": args.timeout,
         "abort": args.abort,
     }
     if args.engine == "multipath":
-        merge = not args.no_merge
-        traceroute = MultipathEngine(
+        return MultipathEngine(
             args.confidence,
             args.retry,
             args.min_burst,
@@ -146,23 +143,78 @@ def main():
             **cls_args,
         )
     else:
-        merge = False
-        traceroute = SinglepathEngine(args.flow, args.probes, **cls_args)
+        return SinglepathEngine(args.flow, args.probes, **cls_args)
 
+
+def discover(
+    engine: AbstractEngine,
+    probe_generator: AbstractProbeGen,
+    remote_addr: str,
+    min_ttl: int,
+    max_ttl: int,
+) -> TracerouteVertex:
+    if isinstance(ip_address(remote_addr), IPv4Address):
+        route = route_conf.route.route
+    else:
+        route = route_conf.route6.route
+    local_addr = route(remote_addr)[1]
+
+    if isinstance(probe_generator, ClassicProbeGen):
+        first_hop = local_addr
+        destination = remote_addr
+    else:
+        first_hop = remote_addr
+        destination = local_addr
+
+    return engine.discover(probe_generator, min_ttl, max_ttl, first_hop, destination)
+
+
+def render_graph(
+    traces: dict[str, TracerouteVertex],
+    hostnames: dict[str, str],
+    merge: bool,
+    output: str,
+):
+    parent = graphviz.Digraph(strict=True)
+    for direction, trace in traces.items():
+        with parent.subgraph(name=f"cluster_{direction}") as g:
+            g.node_attr.update(style="filled")
+            g.attr(label=direction.upper())
+            create_graph(g, trace, hostnames, merge)
+    parent.render(output, cleanup=True)
+
+
+def main():
+    args = parse_arguments()
+
+    try:
+        target = str(ip_address(args.target))
+    except:
+        if not args.ipv4 and not args.ipv6:
+            log.warn("No address family specified for hostname, defaulting to IPv4.")
+            args.ipv4 = True
+        family = socket.AF_INET if args.ipv4 else socket.AF_INET6
+        *_, sockaddr = socket.getaddrinfo(args.target, None, family=family)[0]
+        target = sockaddr[0]
+
+    logging.basicConfig(
+        level={
+            "info": logging.INFO,
+            "debug": logging.DEBUG,
+            "warning": logging.WARNING,
+        }[args.log_level]
+    )
+
+    engine = create_probing_engine(args)
     traces = {}
 
-    outgoing_ip = route_conf.route.route(target)[1]
     if args.direction == "two-way" or args.direction == "forward":
-        probe_gen = ClassicTraceroute(target, proto)
-        first_hop = outgoing_ip
-        destination = target
-        root = traceroute.discover(
-            probe_gen, args.min_ttl, args.max_ttl, first_hop, destination
-        )
+        probe_gen = ClassicProbeGen(target, args.protocol)
+        root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
         traces["forward"] = root
 
     if args.direction == "two-way" or args.direction == "reverse":
-        probe_gen = ReverseTraceroute(target, proto)
+        probe_gen = ReverseProbeGen(target, args.protocol)
 
         # By requesting a probe with a TTL of 0 an error condition is created.
         # A reverse traceroute server will reply with a status code 1,
@@ -176,17 +228,13 @@ def main():
             exit()
         try:
             probe_gen.parse_probe_response(req, resp)
-        except ReverseTraceroute.InvalidTtlException:
+        except ReverseProbeGen.InvalidTtlException:
             pass
         except Exception as e:
             logging.error(e)
             exit()
 
-        first_hop = target
-        destination = outgoing_ip
-        root = traceroute.discover(
-            probe_gen, args.min_ttl, args.max_ttl, first_hop, destination
-        )
+        root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
         traces["reverse"] = root
 
     hostnames = {}
@@ -194,24 +242,8 @@ def main():
         for trace in traces.values():
             hostnames.update(resolve_hostnames(trace))
 
-    measurement = {
-        **create_measurement_args(args),
-        "traces": {
-            # Store the measurement raw (not merged).
-            # Should the merge logic change in the future, past measurements remain valid.
-            direction: [v.to_dict() for v in trace.flatten()]
-            for direction, trace in traces.items()
-        },
-        "hostnames": hostnames,
-    }
-
-    parent = graphviz.Digraph(strict=True)
-    for direction, trace in traces.items():
-        with parent.subgraph(name=f"cluster_{direction}") as g:
-            g.node_attr.update(style="filled")
-            g.attr(label=direction.upper())
-            create_graph(g, trace, hostnames, merge)
-    parent.render(args.output, cleanup=True)
+    measurement = create_measurement(args, traces, hostnames)
+    render_graph(traces, hostnames, not args.no_merge, args.output)
 
     if args.store_json:
         with open(f"{args.output}.json", "w") as writer:

@@ -24,6 +24,20 @@ def parse_arguments() -> argparse.Namespace:
         description="A traceroute client able to trace in both the forward and reverse direction.",
     )
 
+    af_group = parser.add_mutually_exclusive_group()
+    af_group.add_argument(
+        "-4",
+        "--ipv4",
+        action="store_true",
+        help="Resolve the target hostname to an IPv4 address",
+    )
+    af_group.add_argument(
+        "-6",
+        "--ipv6",
+        action="store_true",
+        help="Resolve the target hostname to an IPv6 address",
+    )
+
     probing_group = parser.add_argument_group("probing options")
     probing_group.add_argument(
         "--timeout",
@@ -62,6 +76,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Do not perform a reverse DNS lookup on the IP addresses.",
     )
+    parser.add_argument(
+        "--no-merge",
+        action="store_true",
+        help="Do not merge the vertices before printing the graph.",
+    ),
     parser.add_argument(
         "-o",
         "--output",
@@ -114,11 +133,6 @@ def parse_arguments() -> argparse.Namespace:
         type=float,
         default=0.05,
         help="The probability of failing to detect all vertices for a hop.",
-    )
-    multipath_parser.add_argument(
-        "--no-merge",
-        action="store_true",
-        help="Do not merge the vertices before printing the graph.",
     )
     multipath_parser.add_argument(
         "--opt-single-vertex-hop",
