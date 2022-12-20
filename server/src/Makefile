@@ -1,4 +1,4 @@
-BPF_DIR := $(abspath bpf)
+BPF_DIR := bpf
 BPF_PROG := $(BPF_DIR)/traceroute.o
 
 ifeq ($(TRACEROUTE_AF), TRACEROUTE_V4)
@@ -7,14 +7,15 @@ else ifeq ($(TRACEROUTE_AF), TRACEROUTE_V6)
 suffix := v6
 endif
 
-BUILD_DIR := $(abspath build)/$(suffix)
+OUTDIR := .
+BUILD_DIR := build/$(suffix)
 BPF_BUILD_DIR := $(BUILD_DIR)/bpf
 BPF_PROG := $(BUILD_DIR)/traceroute.o
 SKELETON_DIR := $(BUILD_DIR)/include
 skeleton := $(SKELETON_DIR)/traceroute.skel.h
 
 
-server := augsburg-traceroute-server-$(suffix)
+server := $(OUTDIR)/augsburg-traceroute-server-$(suffix)
 
 .PHONY: all
 all:
