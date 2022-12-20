@@ -36,7 +36,7 @@ TracerouteResult = namedtuple("TracerouteResult", ["address", "rtt"])
 
 
 class AbstractProbeGen:
-    def __init__(self, target, protocol):
+    def __init__(self, target: str, protocol: str):
         self.is_ipv4 = isinstance(ip_address(target), IPv4Address)
         self.target = str(target)
         self.protocol = protocol
@@ -54,7 +54,7 @@ class AbstractProbeGen:
 class ClassicProbeGen(AbstractProbeGen):
     """Implements classic traceroute functionality."""
 
-    def __init__(self, target: [IPv4Address | IPv6Address], protocol: int):
+    def __init__(self, target: str, protocol: str):
         super().__init__(target, protocol)
         self.chksum = in4_chksum if self.is_ipv4 else in6_chksum
 
@@ -130,7 +130,7 @@ class ReverseProbeGen(AbstractProbeGen):
         3: InvalidProtocolException,
     }
 
-    def __init__(self, target, protocol):
+    def __init__(self, target: str, protocol: str):
         super().__init__(target, protocol)
 
     def create_probe(self, ttl: int, flow: int) -> Packet:
