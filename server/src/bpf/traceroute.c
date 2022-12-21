@@ -17,6 +17,7 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "cursor.h"
 #include "logging.h"
 #include "probe.h"
 #include "proto.h"
@@ -26,7 +27,6 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 #include <linux/bpf.h>
-#include <linux/if_ether.h>
 #include <linux/if_packet.h>
 #include <linux/pkt_cls.h>
 

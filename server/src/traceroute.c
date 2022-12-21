@@ -33,8 +33,12 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 #if defined(TRACEROUTE_V4)
     #define FILTER_HANDLE 0xbeaf4
+    #define ADDRSTRLEN INET_ADDRSTRLEN
+    #define ADDR_FAMILY AF_INET
 #elif defined(TRACEROUTE_V6)
     #define FILTER_HANDLE 0xbeaf6
+    #define ADDRSTRLEN INET6_ADDRSTRLEN
+    #define ADDR_FAMILY AF_INET6
 #endif
 
 #define FILTER_PRIO     1
@@ -147,18 +151,11 @@ static int log_message(void *ctx, void *data, size_t size)
 {
     struct message *msg = data;
 
-#if defined(TRACEROUTE_V4)
-    char address[INET_ADDRSTRLEN];
-    int af = AF_INET;
-#elif defined(TRACEROUTE_V6)
-    char address[INET6_ADDRSTRLEN];
-    int af = AF_INET6;
-#endif
-
-    if (!inet_ntop(af, &msg->data.address, address, sizeof(address)))
+    char address[ADDRSTRLEN];
+    if (!inet_ntop(ADDR_FAMILY, &msg->data.address, address, sizeof(address)))
         return 0;
 
-    printf("[%*s, %5u] | ", sizeof(address), address, msg->data.probe_id);
+    printf("[%*s, %5u] | ", ADDRSTRLEN, address, msg->data.probe_id);
     switch (msg->type) {
     case SESSION_CREATED:
         printf("session created.");

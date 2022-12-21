@@ -22,9 +22,10 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 #include "internal.h"
 #include "ip_generic.h"
-#include "cursor.h"
 #include <linux/types.h>
-#include <linux/if_ether.h>
+
+struct cursor;
+struct ethhdr;
 
 INTERNAL int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
                           struct ethhdr **eth, iphdr_t **ip);

@@ -17,29 +17,31 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "logging.h"
-#include "session.h"
-#include <bpf/bpf_endian.h>
-#include <bpf/bpf_helpers.h>
+#include "swap_addr.h"
+#include "ip_generic.h"
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
 #include <linux/types.h>
-#include <linux/bpf.h>
 
-struct {
-    __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 128 * 1024);
-} log_buf SEC(".maps");
-
-INTERNAL void log_message(enum message_type type, struct session_key *key)
+INTERNAL void swap_addr_ethhdr(struct ethhdr *ethhdr)
 {
-    struct message *msg =
-        bpf_ringbuf_reserve(&log_buf, sizeof(struct message), 0);
+    for (int i = 0; i < ETH_ALEN; i++) {
+        __u8 byte = ethhdr->h_dest[i];
+        ethhdr->h_dest[i] = ethhdr->h_source[i];
+        ethhdr->h_source[i] = byte;
+    }
+}
 
-    if (!msg)
-        return;
+INTERNAL void swap_addr_iphdr(iphdr_t *iphdr)
+{
+    ipaddr_t tmp_ip = iphdr->saddr;
+    iphdr->saddr = iphdr->daddr;
+    iphdr->daddr = tmp_ip;
+}
 
-    msg->type = type;
-    msg->data.probe_id = bpf_ntohs(key->identifier);
-    msg->data.address = key->addr;
-
-    bpf_ringbuf_submit(msg, 0);
+INTERNAL void swap_addr(struct ethhdr *eth, iphdr_t *ip)
+{
+    swap_addr_ethhdr(eth);
+    swap_addr_iphdr(ip);
 }

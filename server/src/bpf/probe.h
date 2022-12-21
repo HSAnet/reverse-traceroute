@@ -20,12 +20,12 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #ifndef PROBE_H
 #define PROBE_H
 
-#include "cursor.h"
 #include "internal.h"
 #include "ip_generic.h"
-#include <linux/if_ether.h>
-#include <linux/ip.h>
 #include <linux/types.h>
+
+struct cursor;
+struct ethhdr;
 
 #define SOURCE_PORT bpf_htons(1021)
 

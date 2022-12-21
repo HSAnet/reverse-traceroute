@@ -22,7 +22,6 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 #include "internal.h"
 #include "ip_generic.h"
-#include <linux/bpf.h>
 #include <linux/types.h>
 
 struct session_key {

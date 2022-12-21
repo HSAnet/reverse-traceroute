@@ -18,15 +18,15 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "probe.h"
+#include "cursor.h"
 #include "csum.h"
 #include "resize.h"
 #include "swap_addr.h"
-#include "ip_generic.h"
-#include "pseudohdr.h"
-#include <bpf/bpf_endian.h>
 #include <linux/bpf.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include <linux/if_ether.h>
+#include <bpf/bpf_endian.h>
 
 
 /*
