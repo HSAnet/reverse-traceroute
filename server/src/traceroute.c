@@ -32,16 +32,16 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <fcntl.h>
 
 #if defined(TRACEROUTE_V4)
-    #define FILTER_HANDLE 0xbeaf4
-    #define ADDRSTRLEN INET_ADDRSTRLEN
-    #define ADDR_FAMILY AF_INET
+#define FILTER_HANDLE 0xbeaf4
+#define ADDRSTRLEN    INET_ADDRSTRLEN
+#define ADDR_FAMILY   AF_INET
 #elif defined(TRACEROUTE_V6)
-    #define FILTER_HANDLE 0xbeaf6
-    #define ADDRSTRLEN INET6_ADDRSTRLEN
-    #define ADDR_FAMILY AF_INET6
+#define FILTER_HANDLE 0xbeaf6
+#define ADDRSTRLEN    INET6_ADDRSTRLEN
+#define ADDR_FAMILY   AF_INET6
 #endif
 
-#define FILTER_PRIO     1
+#define FILTER_PRIO 1
 
 struct args {
     int ifindex;      // Always specified by the user
@@ -206,7 +206,8 @@ int main(int argc, char **argv)
 
     DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .ifindex = args.ifindex,
                         .attach_point = BPF_TC_INGRESS);
-    DECLARE_LIBBPF_OPTS(bpf_tc_opts, opts, .handle=FILTER_HANDLE, .priority=FILTER_PRIO,
+    DECLARE_LIBBPF_OPTS(bpf_tc_opts, opts, .handle = FILTER_HANDLE,
+                        .priority = FILTER_PRIO,
                         .prog_fd = bpf_program__fd(tr->progs.prog));
 
     bpf_tc_hook_create(&hook);
@@ -239,7 +240,6 @@ int main(int argc, char **argv)
         }
     }
     ring_buffer__free(log_buf);
-
 
     ret = EXIT_SUCCESS;
 detach:

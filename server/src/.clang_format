@@ -8,3 +8,4 @@ SortIncludes: Never
 SpacesInLineCommentPrefix:
     Minimum: 1
     Maximum: 1
+AlignConsecutiveMacros: AcrossEmptyLines

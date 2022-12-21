@@ -20,7 +20,6 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include "cursor.h"
 #include <linux/bpf.h>
 
-
 INTERNAL long cursor_start(struct cursor *cursor)
 {
     return cursor->skb->data;
@@ -46,7 +45,6 @@ INTERNAL void cursor_clone(struct cursor *original, struct cursor *clone)
 {
     *clone = *original;
 }
-
 
 INTERNAL int PARSE_IP(struct cursor *cursor, iphdr_t **hdr)
 {

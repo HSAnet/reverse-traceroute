@@ -30,8 +30,8 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 
-static void response_init_eth_ip(struct ethhdr *eth, iphdr_t *ip,
-                                 ipaddr_t from, ipaddr_t to)
+static void response_init_eth_ip(struct ethhdr *eth, iphdr_t *ip, ipaddr_t from,
+                                 ipaddr_t to)
 {
     swap_addr_ethhdr(eth);
 

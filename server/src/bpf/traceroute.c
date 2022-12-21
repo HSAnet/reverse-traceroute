@@ -57,7 +57,6 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     probe_args.probe.flow = tr->request.flow;
     probe_args.probe.identifier = (*icmp)->un.echo.id;
 
-
     if ((err = probe_create(cursor, &probe_args, eth, ip)) < 0)
         return TC_ACT_SHOT;
 
@@ -132,7 +131,8 @@ static int handle(struct cursor *cursor)
 
         if (icmp->type == G_ICMP_ECHO_REQUEST && icmp->code == 1) {
             return handle_request(cursor, &eth, &ip, &icmp);
-        } else if ((icmp->type == G_ICMP_TIME_EXCEEDED && icmp->code == 0) || icmp->type == G_ICMP_DEST_UNREACH) {
+        } else if ((icmp->type == G_ICMP_TIME_EXCEEDED && icmp->code == 0) ||
+                   icmp->type == G_ICMP_DEST_UNREACH) {
             iphdr_t *inner_ip;
             if ((ret = PARSE_IP(cursor, &inner_ip)) < 0)
                 goto no_match;

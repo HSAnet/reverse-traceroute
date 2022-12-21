@@ -34,7 +34,6 @@ INTERNAL void cursor_reset(struct cursor *cursor);
 INTERNAL void cursor_init(struct cursor *cursor, struct __sk_buff *skb);
 INTERNAL void cursor_clone(struct cursor *original, struct cursor *clone);
 
-
 #define PARSE(cursor, hdr)                                                     \
     ({                                                                         \
         int __ret = -1;                                                        \

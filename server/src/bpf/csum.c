@@ -50,8 +50,8 @@ INTERNAL __be32 pseudo_header(iphdr_t *ip, __u16 probe_len, __u8 protocol)
     pseudo_hdr += (__be16)(ip->daddr) + (__be16)(ip->daddr >> 16);
 #elif defined(TRACEROUTE_V6)
     for (int i = 0; i < 8; i++) {
-        pseudo_hdr += ip->daddr.in6_u.u6_addr16[i];    
-        pseudo_hdr += ip->saddr.in6_u.u6_addr16[i];    
+        pseudo_hdr += ip->daddr.in6_u.u6_addr16[i];
+        pseudo_hdr += ip->saddr.in6_u.u6_addr16[i];
     }
 #endif
 

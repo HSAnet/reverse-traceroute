@@ -28,7 +28,6 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/if_ether.h>
 #include <bpf/bpf_endian.h>
 
-
 /*
  * Checks if the ICMP packet MAY be an answer to a probe.
  * In that case, the possible session identifier is returned.
@@ -142,7 +141,8 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
 #if defined(TRACEROUTE_V4)
     __be32 seed = 0;
 #elif defined(TRACEROUTE_V6)
-    __be32 seed = pseudo_header(*ip, sizeof(*icmp) + sizeof(*payload), G_PROTO_ICMP);
+    __be32 seed =
+        pseudo_header(*ip, sizeof(*icmp) + sizeof(*payload), G_PROTO_ICMP);
 #endif
 
     *payload = 0xffffffff - bpf_htons(((__u16)icmp->type << 8) + icmp->code) -
