@@ -88,7 +88,7 @@ static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
 }
 
 /*
- * Parses IPv4 packets and checks if the packet is either
+ * Parses IP packets and checks if the packet is either
  * a reverse traceroute request or an answer to a previously
  * sent traceroute probe.
  * In the latter case, an answer to the originator is created
@@ -189,7 +189,7 @@ exit:
 
 /*
  * The entry point of the eBPF program.
- * Only handles IPv4 packets addressed to this host.
+ * Only handles IP packets addressed to this host.
  */
 SEC("tc")
 int prog(struct __sk_buff *skb)

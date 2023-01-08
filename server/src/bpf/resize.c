@@ -26,7 +26,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <bpf/bpf_helpers.h>
 
 /*
- * Resizes the packet to be able to hold the specified length on top of the IPv4
+ * Resizes the packet to be able to hold the specified length on top of the IP
  * header, all options are truncated.
  */
 INTERNAL int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
