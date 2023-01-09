@@ -27,13 +27,19 @@ from ipmininet.cli import IPCLI
 class DiamondTopo(IPTopo):
 
     def build(self, *args, **kwargs):
-        x1, x2, u1, u2, m1, m2, l1, l2 = self.addRouters("x1", "x2", "u1", "u2", "m1", "m2", "l1", "l2")
+        x1, x2, u1, u2, l1, l2, l3 = self.addRouters("x1", "x2", "u1", "u2", "l1", "l2", "l3")
         client = self.addHost("client")
         server = self.addHost("server")
 
-        self.addLinks((x1,u1),(x1,m1),(x1,l1))
-        self.addLinks((u1,u2),(m1,m2),(l1,l2))
-        self.addLinks((u2,x2),(m2,x2),(l2,x2))
+        self.addLink(x1, u1, igp_metric=1)
+        self.addLink(u1, u2, igp_metric=1)
+        self.addLink(u2, x2, igp_metric=2)
+
+        self.addLink(x1, l1, igp_metric=1)
+        self.addLink(l1, l2, igp_metric=1)
+        self.addLink(l2, l3, igp_metric=1)
+        self.addLink(l3, x2, igp_metric=1)
+
         self.addLinks((client,x1),(x2,server))
 
         super().build(*args, **kwargs)
@@ -75,7 +81,7 @@ if __name__ == "__main__":
             for proto in ["udp", "tcp", "icmp"]:
                 print(f"Running test with IPv{af} and protocol {proto}")
                 popen_pcap = net["server"].popen("tcpdump", "-i", "server-eth0", "-w", f"{proto}_{af}.pcap")
-                net["client"].cmd(f"{client} -o {proto}_{af} -{af} reverse {proto} multipath server")
+                net["client"].cmd(f"{client} -o {proto}_{af} -{af} two-way {proto} multipath server")
                 popen_pcap.send_signal(SIGINT)
                 time.sleep(0.5)
 

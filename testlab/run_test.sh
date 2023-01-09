@@ -17,4 +17,4 @@ EOF
 mkdir results && pushd results
 python3 /reverse-traceroute/testlab/test.py "$config"
 popd
-cp -rf results /reverse-traceroute/testlab/results
+cp -rf results /reverse-traceroute/testlab/
