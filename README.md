@@ -3,8 +3,7 @@ Reverse traceroute is an extension to ICMP, enabling hosts to request traceroute
 For detailed information about reverse traceroute and its concepts, have a look at the [resources](#resources).
 
 This repository contains reference implementations for reverse traceroute client and server applications.  
-Altough the protocol itself is able to support both IPv4 and IPv6 implementations,
-this work currently only runs on IPv4.
+Both the protocol and tools are able to support IPv4 and IPv6.
 
 ## The problem we want to solve
 Traceroute provides information on the forward path towards a target.
