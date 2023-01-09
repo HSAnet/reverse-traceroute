@@ -19,6 +19,7 @@ import logging
 import argparse
 import json
 import socket
+from itertools import compress
 from ipaddress import ip_address, IPv4Address, IPv6Address
 from concurrent.futures import ThreadPoolExecutor
 
@@ -184,18 +185,31 @@ def render_graph(
     parent.render(output, cleanup=True)
 
 
+def try_getaddrinfo(target, family):
+    try:
+        return True, socket.getaddrinfo(target, None, family)[0]
+    except:
+        return False, None
+
+
+def try_find_target(target, is_v4_v6):
+    try:
+        return str(ip_address(args.target))
+    except:
+        af_families = [socket.AF_INET, socket.AF_INET6]
+        selectors = list(is_v4_v6) if any(is_v4_v6) else [True,True]
+
+        for af in compress(af_families, selectors):
+            valid, result = try_getaddrinfo(target, af)
+            if valid:
+                *_, sockaddr = result
+                return True, sockaddr[0]
+
+        return False, None
+
+
 def main():
     args = parse_arguments()
-
-    try:
-        target = str(ip_address(args.target))
-    except:
-        if not args.ipv4 and not args.ipv6:
-            log.warn("No address family specified for hostname, defaulting to IPv4.")
-            args.ipv4 = True
-        family = socket.AF_INET if args.ipv4 else socket.AF_INET6
-        *_, sockaddr = socket.getaddrinfo(args.target, None, family=family)[0]
-        target = sockaddr[0]
 
     logging.basicConfig(
         level={
@@ -204,6 +218,13 @@ def main():
             "warning": logging.WARNING,
         }[args.log_level]
     )
+
+    valid, target = try_find_target(args.target, (args.ipv4, args.ipv6))
+    if not valid:
+        log.error(f"Failed to resolve '{args.target}'")
+        exit()
+    else:
+        log.info(f"Determined traceroute target: {target}")
 
     engine = create_probing_engine(args)
     traces = {}
