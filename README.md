@@ -88,25 +88,30 @@ The interface name on which the server will process reverse traceroute traffic
 is a mandatory argument.
 
 ```
-sudo augsburg-traceroute-server [-n MAX_SESSIONS] [-t TIMEOUT_NS] ifname
+sudo augsburg-traceroute-server-v4 [-n MAX_SESSIONS] [-t TIMEOUT_NS] ifname
+sudo augsburg-traceroute-server-v6 [-n MAX_SESSIONS] [-t TIMEOUT_NS] ifname
 ```
 
 ### Examples
-To run the server on the interface eth0, with at most 50.000 sessions and
+To run the IPv4 and IPv6 servers on the interface eth0, with at most 50.000 sessions and
 and a session timeout of 5 seconds:
 
 ```
-augsburg-traceroute-server -n 50000 -t 5000000000 eth0
+augsburg-traceroute-server-v4 -n 50000 -t 5000000000 eth0
+augsburg-traceroute-server-v6 -n 50000 -t 5000000000 eth0
 ```
 
 ### Running the server as a service
-In order to persist the server application across reboots,
+This example creates a service for the IPv4 version of the server.
+You can create a similar IPv6 version with minimal adjustments.
+
+In order to persist the server applications across reboots,
 you can create a systemd service.
-First you have to create the file `/etc/systemd/system/reverse-traceroute@.service`:
+First you have to create a file `/etc/systemd/system/reverse-traceroute-v4@.service`:
 
 ```
 [Unit]
-Description=reverse-traceroute
+Description=reverse-traceroute-v4
 After=network-online.target
   
 [Service]
@@ -117,20 +122,17 @@ ExecStart=<path-to-server> -n <max-sessions> -t <timeout-ns> %I
 WantedBy=multi-user.target
 ```
 Make sure to replace the path to the server and arguments with your own configuration.
-
 Before starting the service, you have to make systemd aware of it by running:
 ```
 sudo systemctl daemon-reload
 ```
-
 Then you can start the service with the following command:
 ```
-sudo systemctl start reverse-traceroute@<ifname>
+sudo systemctl start reverse-traceroute-v4@<ifname>
 ```
-
 In order to persist the service across reboots, run:
 ```
-sudo systemctl enable reverse-traceroute@<ifname>
+sudo systemctl enable reverse-traceroute-v4@<ifname>
 ```
 Note that you have to replace `<ifname>` with the name of the interface
 the server should run on.
@@ -160,7 +162,7 @@ In the `server/` directory run:
 ```
 bash build_docker.sh
 ```
-The executable will be built in a docker container that includes
+Th executables will be built in a docker container that includes
 the needed dependencies.
 
 ## Measurement study
@@ -172,7 +174,7 @@ Please be aware that the data includes hostnames by default.
 If you do not want to transmit resolved hostnames as part of the trace
 you can use the `--no-resolve` client switch.
 
-## Running a public server
+## Running a public endpoint
 Reverse traceroute was designed as a distributed service.
 Hence it lives from the people who decide to host publicly available server endpoints.
 
@@ -181,7 +183,6 @@ then please let us know so that we can add your server to the list of endpoints,
 which are maintained inside the `ENDPOINTS` file.
 
 ## Future work
-* Implement IPv6 support for client and server
 * Introduce alias resolution to match nodes on both the forward and reverse path
 
 ## Disclaimer
