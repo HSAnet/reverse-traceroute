@@ -185,14 +185,14 @@ def render_graph(
     parent.render(output, cleanup=True)
 
 
-def try_getaddrinfo(target, family):
+def try_getaddrinfo(target: str, family: int) -> tuple[bool,tuple]:
     try:
         return True, socket.getaddrinfo(target, None, family)[0]
     except:
         return False, None
 
 
-def try_find_target(target, is_v4_v6):
+def try_find_target(target: str, is_v4_v6: tuple[bool,bool]) -> tuple[bool,str]:
     try:
         return str(ip_address(args.target))
     except:
