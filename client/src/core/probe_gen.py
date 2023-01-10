@@ -79,7 +79,7 @@ class ClassicProbeGen(AbstractProbeGen):
 
             else:
                 l3 = ICMPv6EchoRequest(
-                    code=0, id=(os.getpid() % 0xFF) + 1, seq=probe_id, chksum=flow
+                    code=0, id=(os.getpid() % 0xFF) + 1, seq=probe_id, cksum=flow
                 ) / struct.pack("!H", 0)
                 l3.load = struct.pack(
                     "!H", self.chksum(socket.IPPROTO_ICMPV6, ip, bytes(l3))
