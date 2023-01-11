@@ -161,7 +161,7 @@ In the `server/` directory run:
 ```
 bash build_docker.sh
 ```
-Th executables will be built in a docker container that includes
+The executables will be built in a docker container that includes
 the needed dependencies.
 
 ## Measurement study
