@@ -21,13 +21,11 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #define SESSION_H
 
 #include "internal.h"
-#include <linux/bpf.h>
+#include "ip_generic.h"
 #include <linux/types.h>
 
-// IMPORTANT: These are the main configuration values for state maintenance.
-
 struct session_key {
-    __be32 addr;
+    ipaddr_t addr;
     __u16 identifier;
     __u16 padding;
 };

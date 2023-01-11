@@ -20,7 +20,9 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #ifndef MESSAGES_H
 #define MESSAGES_H
 
+#include <linux/ipv6.h>
 #include <linux/types.h>
+#include <sys/socket.h>
 
 enum message_type {
     SESSION_CREATED,
@@ -33,7 +35,11 @@ enum message_type {
 struct message {
     enum message_type type;
     struct {
+#if defined(TRACEROUTE_V4)
         __be32 address;
+#elif defined(TRACEROUTE_V6)
+        struct in6_addr address;
+#endif
         __be32 probe_id;
     } data;
 };

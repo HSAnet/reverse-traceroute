@@ -20,40 +20,19 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #ifndef CURSOR_H
 #define CURSOR_H
 
-#include <linux/bpf.h>
-#include <linux/ip.h>
+#include "internal.h"
+#include "ip_generic.h"
 
 struct cursor {
     struct __sk_buff *skb;
     void *pos;
 };
 
-static long cursor_start(struct cursor *cursor)
-{
-    return cursor->skb->data;
-}
-
-static long cursor_end(struct cursor *cursor)
-{
-    return cursor->skb->data_end;
-}
-
-static void cursor_reset(struct cursor *cursor)
-{
-    cursor->pos = (void *)cursor_start(cursor);
-}
-
-static void cursor_init(struct cursor *cursor, struct __sk_buff *skb)
-{
-    cursor->skb = skb;
-    cursor_reset(cursor);
-}
-
-static void cursor_clone(struct cursor *original, struct cursor *clone)
-{
-    *clone = *original;
-}
-
+INTERNAL long cursor_start(struct cursor *cursor);
+INTERNAL long cursor_end(struct cursor *cursor);
+INTERNAL void cursor_reset(struct cursor *cursor);
+INTERNAL void cursor_init(struct cursor *cursor, struct __sk_buff *skb);
+INTERNAL void cursor_clone(struct cursor *original, struct cursor *clone);
 
 #define PARSE(cursor, hdr)                                                     \
     ({                                                                         \
@@ -68,17 +47,6 @@ static void cursor_clone(struct cursor *original, struct cursor *clone)
     })
 
 // Parses the IP header including any following options.
-static int PARSE_IP(struct cursor *cursor, struct iphdr **hdr)
-{
-    if (PARSE(cursor, hdr) < 0)
-        return -1;
+INTERNAL int PARSE_IP(struct cursor *cursor, iphdr_t **hdr);
 
-    long new_pos = (long)(*hdr) + (**hdr).ihl * 4;
-    if (new_pos <= cursor_end(cursor)) {
-        cursor->pos = (void *)new_pos;
-        return 0;
-    }
-
-    return -1;
-}
 #endif
