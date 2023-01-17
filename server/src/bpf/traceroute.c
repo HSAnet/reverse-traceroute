@@ -17,19 +17,17 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "cursor.h"
 #include "logging.h"
 #include "probe.h"
 #include "proto.h"
 #include "response.h"
 #include "session.h"
+#include "ip_generic.h"
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 #include <linux/bpf.h>
-#include <linux/icmp.h>
-#include <linux/if_ether.h>
 #include <linux/if_packet.h>
-#include <linux/in.h>
-#include <linux/ip.h>
 #include <linux/pkt_cls.h>
 
 /*
@@ -39,7 +37,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
  * invalid configuration is dispatched.
  */
 static int handle_request(struct cursor *cursor, struct ethhdr **eth,
-                          struct iphdr **ip, struct icmphdr **icmp)
+                          iphdr_t **ip, struct icmphdr **icmp)
 {
     int err;
     union trhdr *tr;
@@ -49,13 +47,13 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     struct session_state state = {.timestamp_ns = bpf_ktime_get_ns()};
 
     if (PARSE(cursor, &tr) < 0)
-        return TC_ACT_UNSPEC;
+        return TC_ACT_OK;
 
     session.addr = (*ip)->saddr;
     session.identifier = (*icmp)->un.echo.id;
 
     probe_args.ttl = tr->request.ttl;
-    probe_args.proto = tr->request.proto ?: IPPROTO_ICMP;
+    probe_args.proto = tr->request.proto;
     probe_args.probe.flow = tr->request.flow;
     probe_args.probe.identifier = (*icmp)->un.echo.id;
 
@@ -74,7 +72,7 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
 }
 
 static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
-                               struct iphdr **ip)
+                               iphdr_t **ip)
 {
     if (bpf_clone_redirect(cursor->skb, cursor->skb->ifindex, BPF_F_INGRESS) <
         0)
@@ -90,7 +88,7 @@ static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
 }
 
 /*
- * Parses IPv4 packets and checks if the packet is either
+ * Parses IP packets and checks if the packet is either
  * a reverse traceroute request or an answer to a previously
  * sent traceroute probe.
  * In the latter case, an answer to the originator is created
@@ -108,7 +106,7 @@ static int handle(struct cursor *cursor)
     struct cursor l3_cursor;
 
     struct ethhdr *eth;
-    struct iphdr *ip;
+    iphdr_t *ip;
 
     if (PARSE(cursor, &eth) < 0)
         goto no_match;
@@ -119,9 +117,9 @@ static int handle(struct cursor *cursor)
     // These will be overwritten if a nested ICMP-packet is received.
     is_request = 0;
     session.addr = ip->saddr;
-    proto = ip->protocol;
+    proto = IP_NEXTHDR(*ip);
 
-    if (proto == IPPROTO_ICMP) {
+    if (proto == G_PROTO_ICMP) {
         struct icmphdr *icmp;
 
         // Clone the cursor before parsing the ICMP-header.
@@ -131,14 +129,15 @@ static int handle(struct cursor *cursor)
         if (PARSE(cursor, &icmp) < 0)
             goto no_match;
 
-        if (icmp->type == 8 && icmp->code == 1) {
+        if (icmp->type == G_ICMP_ECHO_REQUEST && icmp->code == 1) {
             return handle_request(cursor, &eth, &ip, &icmp);
-        } else if ((icmp->type == 11 && icmp->code == 0) || icmp->type == 3) {
-            struct iphdr *inner_ip;
+        } else if ((icmp->type == G_ICMP_TIME_EXCEEDED && icmp->code == 0) ||
+                   icmp->type == G_ICMP_DEST_UNREACH) {
+            iphdr_t *inner_ip;
             if ((ret = PARSE_IP(cursor, &inner_ip)) < 0)
                 goto no_match;
 
-            proto = inner_ip->protocol;
+            proto = IP_NEXTHDR(*inner_ip);
             session.addr = inner_ip->daddr;
             is_request = 1;
         } else {
@@ -182,7 +181,7 @@ static int handle(struct cursor *cursor)
 
 // Jump here if packet has not been changed.
 no_match:
-    return TC_ACT_UNSPEC;
+    return TC_ACT_OK;
 // Jump here if packet has been changed.
 exit:
     return TC_ACT_SHOT;
@@ -190,7 +189,7 @@ exit:
 
 /*
  * The entry point of the eBPF program.
- * Only handles IPv4 packets addressed to this host.
+ * Only handles IP packets addressed to this host.
  */
 SEC("tc")
 int prog(struct __sk_buff *skb)
@@ -201,7 +200,7 @@ int prog(struct __sk_buff *skb)
     struct cursor cursor;
     cursor_init(&cursor, skb);
 
-    if (bpf_ntohs(skb->protocol) == ETH_P_IP)
+    if (bpf_ntohs(skb->protocol) == G_ETH_P_IP)
         return handle(&cursor);
 
     return TC_ACT_UNSPEC;

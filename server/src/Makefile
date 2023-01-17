@@ -1,28 +1,45 @@
-BPF_DIR := $(abspath bpf)
+BPF_DIR := bpf
 BPF_PROG := $(BPF_DIR)/traceroute.o
 
+ifeq ($(TRACEROUTE_AF), TRACEROUTE_V4)
+suffix := v4
+else ifeq ($(TRACEROUTE_AF), TRACEROUTE_V6)
+suffix := v6
+endif
+
 OUTDIR := .
-server := $(OUTDIR)/augsburg-traceroute-server
+BUILD_DIR := build/$(suffix)
+BPF_BUILD_DIR := $(BUILD_DIR)/bpf
+BPF_PROG := $(BUILD_DIR)/traceroute.o
+SKELETON_DIR := $(BUILD_DIR)/include
+skeleton := $(SKELETON_DIR)/traceroute.skel.h
+
+
+server := $(OUTDIR)/augsburg-traceroute-server-$(suffix)
 
 .PHONY: all
-all: $(server)
+all:
+	$(MAKE) server TRACEROUTE_AF=TRACEROUTE_V4
+	$(MAKE) server TRACEROUTE_AF=TRACEROUTE_V6
 
 include tools.mk
 
-$(server): traceroute.c $(LIBBPF) traceroute.skel.h
-	clang-14 -Wall traceroute.c $(LIBBPF) $(INCLUDES) -o $@ -lelf -lz -static
+.PHONY: server
+server: $(server)
+$(server): traceroute.c $(skeleton) | $(LIBBPF)
+	clang-14 -Wall traceroute.c $(LIBBPF) $(INCLUDES) -I$(SKELETON_DIR) -D$(TRACEROUTE_AF) -o $@ -lelf -lz -static
 
-traceroute.skel.h: $(BPF_PROG) $(BPFTOOL)
+$(skeleton): $(BPF_PROG) | $(BPFTOOL) $(SKELETON_DIR)
 	$(BPFTOOL) gen skeleton $(BPF_PROG) > $@
 
-$(BPF_PROG): $(patsubst %.c,%.bc, $(wildcard $(BPF_DIR)/*.c))
-	llvm-link-14 $^ -o $(BPF_PROG).bc
-	llc-14 -filetype obj $(BPF_PROG).bc -o $@
+$(BPF_PROG): $(addprefix $(BPF_BUILD_DIR)/,$(patsubst %.c,%.bc, $(notdir $(wildcard $(BPF_DIR)/*.c))))
+	llvm-link-14 $^ | llc-14 -filetype obj -o $@
 
-$(BPF_DIR)/%.bc: $(BPF_DIR)/%.c | $(LIBBPF)
-	clang-14 -emit-llvm -target bpf -g $(INCLUDES) -O2 -Wall -c $< -o $@
+$(BPF_BUILD_DIR)/%.bc: $(BPF_DIR)/%.c | $(BPF_BUILD_DIR) $(LIBBPF)
+	clang-14 -emit-llvm -target bpf -D$(TRACEROUTE_AF) -g $(INCLUDES) -O2 -Wall -c $< -o $@
+
+$(BUILD_DIR) $(BPF_BUILD_DIR) $(SKELETON_DIR):
+	mkdir -p $@
 
 clean::
-	-find . -type f -name *.o -delete
-	-find . -type f -name "*.bc" -delete
-	-rm traceroute.skel.h
+	-rm -r build

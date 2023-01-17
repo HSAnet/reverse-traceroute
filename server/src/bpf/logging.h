@@ -22,7 +22,8 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 #include "../messages.h"
 #include "internal.h"
-#include "session.h"
+
+struct session_key;
 
 INTERNAL void log_message(enum message_type type, struct session_key *key);
 

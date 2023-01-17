@@ -5,3 +5,4 @@ tags
 *.bc
 *.o
 __pycache__/
+.vagrant/
