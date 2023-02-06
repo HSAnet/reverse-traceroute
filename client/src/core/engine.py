@@ -236,7 +236,7 @@ class MultipathEngine(AbstractEngine):
     def __nprobes(self, hop: TracerouteHop) -> int:
         """Computes the number of flows needed for the next hop."""
         probes = lambda v: stopping_point(
-            max(1, len(v.successors)) + 1, self.confidence
+            max(1, len(v.successors)), self.confidence
         )
 
         total_flows = len(hop.flows)
