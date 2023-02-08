@@ -21,10 +21,10 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/types.h>
 #include <bpf/bpf_endian.h>
 
-INTERNAL __sum16 csum(void *cursor, __u16 len, __be32 seed)
+INTERNAL __sum16 csum(const void *cursor, __u16 len, __be32 seed)
 {
     __be32 sum = seed;
-    __be16 *pos = cursor;
+    const __be16 *pos = cursor;
 
     while (len > 1) {
         sum += *(pos++);
@@ -41,7 +41,7 @@ INTERNAL __sum16 csum(void *cursor, __u16 len, __be32 seed)
     return (__sum16)~sum;
 }
 
-INTERNAL __be32 pseudo_header(iphdr_t *ip, __u16 probe_len, __u8 protocol)
+INTERNAL __be32 pseudo_header(const iphdr_t *ip, __u16 probe_len, __u8 protocol)
 {
     __be32 pseudo_hdr = bpf_htons(probe_len);
 

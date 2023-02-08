@@ -192,10 +192,10 @@ static int handle(struct cursor *cursor)
         goto drop;
     return bpf_redirect(cursor->skb->ifindex, 0);
 
-// Jump here if packet has not been changed.
+// Jump here to allow the packet to proceed.
 pass:
     return TC_ACT_OK;
-// Jump here if packet has been changed.
+// Jump here to drop the packet.
 drop:
     return TC_ACT_SHOT;
 }

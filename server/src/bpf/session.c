@@ -24,6 +24,9 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <time.h>
 #include <bpf/bpf_helpers.h>
 
+// This variable may be overwritten by the program loader.
+// We declare it as volatile so the compiler won´t optimize it away,
+// e.g. inline the constant value into instructions.
 volatile const __u64 TIMEOUT_NS = DEFAULT_TIMEOUT_NS;
 
 // The internally used state consists of the usual state and a timer.
@@ -42,7 +45,7 @@ struct {
     __type(value, struct __session_state);
 } map_sessions SEC(".maps");
 
-static int session_timeout_callback(void *map, struct session_key *key,
+static int session_timeout_callback(void *map, const struct session_key *key,
                                     struct __session_state *state)
 {
     log_message(SESSION_TIMEOUT, key);
@@ -50,18 +53,18 @@ static int session_timeout_callback(void *map, struct session_key *key,
     return 0;
 }
 
-static struct __session_state *__session_find(struct session_key *key)
+static struct __session_state *__session_find(const struct session_key *key)
 {
     return bpf_map_lookup_elem(&map_sessions, key);
 }
 
-INTERNAL int session_delete(struct session_key *session)
+INTERNAL int session_delete(const struct session_key *session)
 {
     log_message(SESSION_DELETED, session);
     return bpf_map_delete_elem(&map_sessions, session);
 }
 
-INTERNAL struct session_state *session_find(struct session_key *key)
+INTERNAL struct session_state *session_find(const struct session_key *key)
 {
     struct __session_state *__state = __session_find(key);
 
@@ -70,8 +73,8 @@ INTERNAL struct session_state *session_find(struct session_key *key)
     return &__state->state;
 }
 
-INTERNAL int session_add(struct session_key *session,
-                         struct session_state *state)
+INTERNAL int session_add(const struct session_key *session,
+                         const struct session_state *state)
 {
     struct __session_state __state = {.state = *state, .padding = 0},
                            *state_ptr;
