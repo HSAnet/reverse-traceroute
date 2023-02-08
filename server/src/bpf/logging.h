@@ -25,6 +25,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 struct session_key;
 
-INTERNAL void log_message(enum message_type type, const struct session_key *key);
+INTERNAL void log_message(enum message_type type,
+                          const struct session_key *key);
 
 #endif
