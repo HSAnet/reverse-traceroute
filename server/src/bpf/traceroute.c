@@ -153,21 +153,8 @@ static int handle(struct cursor *cursor)
     session.identifier = ret;
 
     state = session_find(&session);
-    if (!state) {
-        // ICMP responses are identified by the ID field,
-        // which may be used by outgoing ping packets as well.
-        // Thus, when receiving an ICMP packet that does not belong
-        // to reverse traceroute, it is passed up to userspace.
-        if (proto == G_PROTO_ICMP)
-            goto pass;
-        // TCP and UDP probes employ a specific source port,
-        // which will be reserved for reverse traceroute.
-        // As no other programs should use that port,
-        // we can drop all possible responses with no
-        // associated sessions.
-        else
-            goto drop;
-    }
+    if (!state)
+        goto drop;
 
     log_message(SESSION_PROBE_ANSWERED, &session);
     session_delete(&session);

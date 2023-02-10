@@ -42,7 +42,7 @@ static int probe_match_icmp(struct cursor *cursor, __u8 is_request)
 
     if (PARSE(cursor, &icmp) < 0)
         return -1;
-    if (icmp->un.echo.id != SOURCE_PORT)
+    if (icmp->un.echo.sequence != ICMP_PROBE_SEQ)
         return -1;
 
     if (is_request) {
@@ -53,7 +53,7 @@ static int probe_match_icmp(struct cursor *cursor, __u8 is_request)
             return -1;
     }
 
-    return icmp->un.echo.sequence;
+    return icmp->un.echo.id;
 }
 
 /*
@@ -135,8 +135,8 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
     icmp->type = G_ICMP_ECHO_REQUEST;
     icmp->code = 0;
     icmp->checksum = probe->flow ? probe->flow : bpf_htons(0xbeaf);
-    icmp->un.echo.sequence = probe->identifier;
-    icmp->un.echo.id = SOURCE_PORT;
+    icmp->un.echo.id = probe->identifier;
+    icmp->un.echo.sequence = ICMP_PROBE_SEQ;
 
 #if defined(TRACEROUTE_V4)
     __be32 seed = 0;

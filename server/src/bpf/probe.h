@@ -28,6 +28,7 @@ struct cursor;
 struct ethhdr;
 
 #define SOURCE_PORT bpf_htons(1021)
+#define ICMP_PROBE_SEQ 0xffff
 
 struct probe {
     __be16 flow;
