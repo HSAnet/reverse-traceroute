@@ -116,6 +116,22 @@ class TracerouteVertex:
 
         yield from _flatten(self)
 
+    def traces(self) -> Generator[list["TracerouteVertex"], None, None]:
+        "Return all loop-free paths from start to finish."
+        def _traces(vertex, trace=[]):
+            trace = list(trace)
+            if vertex in trace:
+                return
+
+            trace.append(vertex)
+            if not vertex.successors:
+                yield trace
+            for next_vertex in vertex.successors:
+                yield from _traces(next_vertex, trace)    
+
+        yield from _traces(self)
+
+
     def merge(self, other: "TracerouteVertex") -> "TracerouteVertex":
         assert self == other
         log.debug(f"Merging {self} with {other}")

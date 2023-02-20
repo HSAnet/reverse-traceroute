@@ -35,6 +35,8 @@ from .graph import create_graph
 from .args import parse_arguments
 from .transmit import transmit_measurement
 
+from .core.merge import Apar
+
 
 logging.getLogger("graphviz").setLevel(logging.ERROR)
 
@@ -257,6 +259,13 @@ def main():
 
         root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
         traces["reverse"] = root
+
+    if args.direction == "two-way":
+        try:
+            apar = Apar(traces["forward"], traces["reverse"])
+            apar.run()
+        except:
+            pass
 
     hostnames = {}
     if not args.no_resolve:
