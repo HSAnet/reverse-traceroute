@@ -35,7 +35,7 @@ from .graph import create_graph
 from .args import parse_arguments
 from .transmit import transmit_measurement
 
-from .core.merge import Apar
+from .core.merge import apar
 
 
 logging.getLogger("graphviz").setLevel(logging.ERROR)
@@ -262,8 +262,7 @@ def main():
 
     if args.direction == "two-way":
         try:
-            apar = Apar(traces["forward"], traces["reverse"])
-            apar.run()
+            apar(traces["forward"], traces["reverse"])
         except:
             pass
 
