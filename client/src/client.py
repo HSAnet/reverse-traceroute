@@ -261,10 +261,7 @@ def main():
         traces["reverse"] = root
 
     if args.direction == "two-way":
-        try:
-            apar(traces["forward"], traces["reverse"])
-        except:
-            pass
+        apar(traces["forward"], traces["reverse"])
 
     hostnames = {}
     if not args.no_resolve:
