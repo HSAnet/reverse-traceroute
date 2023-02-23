@@ -157,25 +157,27 @@ static int log_message(void *ctx, void *data, size_t size)
 
     printf("[%*s, %5u] | ", ADDRSTRLEN, address, msg->data.probe_id);
     switch (msg->type) {
+    case SESSION_EXISTS:
+        printf("session exists.\n");
+        break;
     case SESSION_CREATED:
-        printf("session created.");
+        printf("session created.\n");
         break;
     case SESSION_DELETED:
-        printf("session deleted.");
+        printf("session deleted.\n");
         break;
     case SESSION_TIMEOUT:
-        printf("session timed out.");
+        printf("session timed out.\n");
         break;
     case SESSION_BUFFER_FULL:
-        printf("session buffer full.");
+        printf("session buffer full.\n");
         break;
     case SESSION_PROBE_ANSWERED:
-        printf("probe answer received.");
+        printf("probe answer received.\n");
         break;
     }
-    printf("\n");
+    
     fflush(stdout);
-
     return 0;
 }
 

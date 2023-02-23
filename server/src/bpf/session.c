@@ -23,6 +23,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/bpf.h>
 #include <time.h>
 #include <bpf/bpf_helpers.h>
+#include <asm-generic/errno-base.h>
 
 // This variable may be overwritten by the program loader.
 // We declare it as volatile so the compiler won´t optimize it away,
@@ -76,31 +77,37 @@ INTERNAL struct session_state *session_find(const struct session_key *key)
 INTERNAL int session_add(const struct session_key *session,
                          const struct session_state *state)
 {
+    int ret;
     struct __session_state __state = {.state = *state, .padding = 0},
                            *state_ptr;
 
-    state_ptr = __session_find(session);
-    if (state_ptr)
-        return -1;
-
-    if (bpf_map_update_elem(&map_sessions, session, &__state, BPF_NOEXIST) ==
-        -1)
-        return -1;
-
-    state_ptr = __session_find(session);
-    if (!state_ptr) {
-        log_message(SESSION_BUFFER_FULL, session);
-        return -1;
+    ret = bpf_map_update_elem(&map_sessions, session, &__state, BPF_NOEXIST);
+    if (ret) {
+        switch (ret) {
+        case -EEXIST:
+            log_message(SESSION_EXISTS, session);
+            break;
+        case -E2BIG:
+            log_message(SESSION_BUFFER_FULL, session);
+            break;
+        }
+        goto err;
     }
 
-    if (bpf_timer_init(&state_ptr->timer, &map_sessions, CLOCK_MONOTONIC) == -1)
-        return -1;
-    if (bpf_timer_set_callback(&state_ptr->timer, session_timeout_callback) ==
-        -1)
-        return -1;
-    if (bpf_timer_start(&state_ptr->timer, TIMEOUT_NS, 0) == -1)
-        return -1;
+    state_ptr = __session_find(session);
+    if (!state_ptr)
+        goto err;
+
+    if (bpf_timer_init(&state_ptr->timer, &map_sessions, CLOCK_MONOTONIC) < 0)
+        goto err;
+    if (bpf_timer_set_callback(&state_ptr->timer, session_timeout_callback) < 0)
+        goto err;
+    if (bpf_timer_start(&state_ptr->timer, TIMEOUT_NS, 0) < 0)
+        goto err;
 
     log_message(SESSION_CREATED, session);
     return 0;
+
+err:
+    return -1;
 }
