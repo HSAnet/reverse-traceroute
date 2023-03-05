@@ -70,9 +70,7 @@ def add_alias(vertex_pair, graph_pair, aliases):
     vertex_a, vertex_b = vertex_pair
     forward, reverse = graph_pair
 
-    if vertex_a == vertex_b:
-        print("Alias pair is equal.")
-        return
+    assert vertex_a != vertex_b
 
     overlap = {vertex_a, vertex_b}
     existing_sets = [alias_set for alias_set in aliases if alias_set & overlap]
@@ -118,7 +116,7 @@ def resolve_aliases(forward, reverse, p2p, aliases=[]):
 
     for subnet, vertices in form_subnets(forward, reverse):
         print(f"{subnet=} {vertices=}")
-        for f_trace, r_trace in product(forward_traces, reverse_traces):
+        for f_trace, r_trace in product(forward_traces + reverse_traces, repeat=2):
             r_trace = list(reversed(r_trace))
 
             f_vertices = set(f_trace) & vertices
@@ -130,8 +128,10 @@ def resolve_aliases(forward, reverse, p2p, aliases=[]):
 
                 if f_index < 1:
                     continue
+
                 candidates = f_trace[f_index - 1], r_trace[r_index]
-                print(f"{candidates=}")
+                if candidates[0] == candidates[1]:
+                    continue
 
                 params = {
                     "f_trace": f_trace,
@@ -158,6 +158,12 @@ def apar(forward, reverse):
 
     print()
     print(f"{aliases=}")
+
+    with open("traces.txt", "w") as f:
+        lines = []
+        for trace in chain(forward.traces(), reverse.traces()):
+            lines += ["#"] + [ v.address for v in trace ]
+        f.writelines("\n".join(lines))
 
     return aliases
 
@@ -194,6 +200,7 @@ reverse_trace = [
     ]
 ]
 
+"""
 for a, b in pairwise(forward_trace):
     a.add_successor(b)
 
@@ -201,3 +208,4 @@ for a, b in pairwise(reversed(reverse_trace)):
     a.add_successor(b)
 
 apar(forward_trace[0], reverse_trace[-1])
+"""
