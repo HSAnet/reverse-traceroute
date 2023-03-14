@@ -19,6 +19,7 @@ import random
 import time
 import math
 import logging
+from random import shuffle
 from itertools import islice, product
 from typing import Generator
 from collections.abc import Iterable
@@ -167,6 +168,8 @@ class SinglepathEngine(AbstractEngine):
 class MultipathEngine(AbstractEngine):
     """A hop-by-hop variation of the existing diamond miner algorithm."""
 
+    flow_range = set(range(10000, 0xFFFF + 1))
+
     def __init__(
         self,
         confidence: float,
@@ -254,11 +257,12 @@ class MultipathEngine(AbstractEngine):
         def generate():
             prev_flows = hop.flows
             yield from prev_flows
-            while True:
-                flow = int(random.uniform(10000, 65535))
-                if flow not in prev_flows:
-                    prev_flows.add(flow)
-                    yield flow
+
+            remaining_flows = list(self.flow_range - prev_flows)
+            random.shuffle(remaining_flows)
+            yield from remaining_flows
+
+            log.warn(f"Exhausted all possible flows for {hop=}")
 
         start = 0
         flow_generator = generate()
@@ -281,11 +285,7 @@ class MultipathEngine(AbstractEngine):
             # "A -> B -> B -> C -> C -> D".
             # By avoiding to probe hops twice in a row the impact of rate limiting
             # is reduced.
-            n_hops = len(next_hop)
             self.__send_probes_to_hop(probe_generator, next_hop, flows)
-            if len(next_hop) == n_hops:
-                log.warning("No new vertices detected, breaking from send loop")
-                break
 
             missing_flows = next_hop.flows - hop.flows
             send_probes = lambda: self.__send_probes_to_hop(
@@ -306,4 +306,6 @@ class MultipathEngine(AbstractEngine):
                 else:
                     send_probes()
 
-            hop.connectTo(next_hop)
+            if hop.connectTo(next_hop) == 0:
+                log.warn("No more links detected. Breaking from send loop.")
+                break

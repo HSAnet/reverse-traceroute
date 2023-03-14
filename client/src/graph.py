@@ -19,13 +19,8 @@ from graphviz import Digraph
 from .core.container import TracerouteVertex
 
 
-def create_graph(
-    graph: Digraph, root: TracerouteVertex, hostnames: dict[str, str], merge: bool
-):
+def create_graph(graph: Digraph, root: TracerouteVertex, hostnames: dict[str, str]):
     """Create a digraph from the root vertex."""
-    if merge:
-        root.merge_vertices()
-
     nodes = list(root.flatten())
 
     for node in nodes:

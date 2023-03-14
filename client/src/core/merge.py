@@ -1,10 +1,14 @@
-from .container import TracerouteVertex, BlackHoleVertex
+import logging
+import operator
 from ipaddress import IPv4Network, IPv4Address
-from itertools import groupby, combinations, pairwise, product, chain
-from pprint import pprint
+from itertools import groupby, combinations, pairwise, product, permutations, chain
 from functools import reduce, cache
 from collections import namedtuple
-import operator
+
+from .container import TracerouteVertex, BlackHoleVertex
+
+
+log = logging.getLogger(__name__)
 
 
 def group_subnets(vertices, prefix_len):
@@ -41,12 +45,10 @@ def form_subnets(forward, reverse):
         matches = group_subnets(all_vertices, prefix_len)
         for subnet, vertices in matches.items():
             if completeness(subnet, vertices) < 0.5:
-                print(f"{subnet=}: Completeness not satisfied.")
                 continue
             for trace in chain(forward.traces(), reverse.traces()):
                 shared_vertices = set(trace) & vertices
                 if not accuracy(shared_vertices, trace):
-                    print(f"{subnet=}: Accuracy not satisfied.")
                     break
             else:
                 subnets_to_vertices[subnet] = vertices
@@ -77,14 +79,12 @@ def add_alias(vertex_pair, graph_pair, aliases):
     merged_aliases = reduce(operator.or_, existing_sets, overlap)
 
     if not no_loop(forward, reverse, merged_aliases):
-        print("No-loop condition not met.")
         return
 
     for existing_set in existing_sets:
         aliases.remove(existing_set)
 
     aliases.append(merged_aliases)
-    print(f"Resolved {aliases=}")
 
 
 def common_subnet(f_trace, r_trace, f_index, r_index, seen_subnets):
@@ -115,8 +115,7 @@ def resolve_aliases(forward, reverse, p2p, aliases=[]):
     seen_subnets = {}
 
     for subnet, vertices in form_subnets(forward, reverse):
-        print(f"{subnet=} {vertices=}")
-        for f_trace, r_trace in product(forward_traces + reverse_traces, repeat=2):
+        for f_trace, r_trace in permutations(forward_traces + reverse_traces, 2):
             r_trace = list(reversed(r_trace))
 
             f_vertices = set(f_trace) & vertices
@@ -156,56 +155,13 @@ def apar(forward, reverse):
     aliases = resolve_aliases(forward, reverse, False)
     aliases = resolve_aliases(forward, reverse, True, aliases)
 
-    print()
-    print(f"{aliases=}")
-
+    """
     with open("traces.txt", "w") as f:
         lines = []
         for trace in chain(forward.traces(), reverse.traces()):
             lines += ["#"] + [ v.address for v in trace ]
         f.writelines("\n".join(lines))
+    """
 
+    log.info(f"{aliases=}")
     return aliases
-
-
-forward_trace = [
-    TracerouteVertex(addr)
-    for addr in [
-        "18.7.21.1",
-        "18.168.0.27",
-        "192.5.89.89",
-        "192.5.89.10",
-        "198.32.8.85",
-        "192.32.8.65",
-        "192.32.8.33",
-        "206.223.141.69",
-        "206.223.131.74",
-    ]
-]
-
-reverse_trace = [
-    TracerouteVertex(addr)
-    for addr in [
-        "18.7.21.7",
-        "18.168.0.25",
-        "192.5.89.90",
-        "192.5.89.9",
-        "192.32.8.84",
-        "192.32.8.66",
-        "192.32.8.34",
-        "206.223.141.70",
-        "206.223.141.73",
-        "129.110.5.1",
-        "129.110.95.1",
-    ]
-]
-
-"""
-for a, b in pairwise(forward_trace):
-    a.add_successor(b)
-
-for a, b in pairwise(reversed(reverse_trace)):
-    a.add_successor(b)
-
-apar(forward_trace[0], reverse_trace[-1])
-"""

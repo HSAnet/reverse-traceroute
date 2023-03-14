@@ -175,7 +175,6 @@ def discover(
 def render_graph(
     traces: dict[str, TracerouteVertex],
     hostnames: dict[str, str],
-    merge: bool,
     output: str,
 ):
     parent = graphviz.Digraph(strict=True)
@@ -183,7 +182,7 @@ def render_graph(
         with parent.subgraph(name=f"cluster_{direction}") as g:
             g.node_attr.update(style="filled")
             g.attr(label=direction.upper())
-            create_graph(g, trace, hostnames, merge)
+            create_graph(g, trace, hostnames)
     parent.render(output, cleanup=True)
 
 
@@ -231,12 +230,11 @@ def main():
     engine = create_probing_engine(args)
     traces = {}
 
-    if args.direction == "two-way" or args.direction == "forward":
+    if args.direction in ("two-way", "forward"):
         probe_gen = ClassicProbeGen(target, args.protocol)
         root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
         traces["forward"] = root
-
-    if args.direction == "two-way" or args.direction == "reverse":
+    if args.direction in  ("two-way", "reverse"):
         probe_gen = ReverseProbeGen(target, args.protocol)
 
         # By requesting a probe with a TTL of 0 an error condition is created.
@@ -260,16 +258,22 @@ def main():
         root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
         traces["reverse"] = root
 
-    if args.direction == "two-way":
-        apar(traces["forward"], traces["reverse"])
-
     hostnames = {}
     if not args.no_resolve:
         for trace in traces.values():
             hostnames.update(resolve_hostnames(trace))
 
     measurement = create_measurement(args, traces, hostnames)
-    render_graph(traces, hostnames, not args.no_merge, args.output)
+    render_graph(traces, hostnames, args.output)
+
+    if args.merge in ("address", "router"):
+        for trace in traces.values():
+            trace.merge_vertices()
+    if args.merge in "router":
+        alias_buckets = apar(traces["forward"], traces["reverse"])
+        with open(f"{args.output}_aliases.txt", "w") as f:
+            for aliases in alias_buckets:
+                f.write(",".join(v.address for v in aliases) + "\n")
 
     if args.store_json:
         with open(f"{args.output}.json", "w") as writer:

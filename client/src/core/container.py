@@ -18,7 +18,7 @@ If not, see <https://www.gnu.org/licenses/>.
 import logging
 from typing import Generator
 from collections.abc import MutableSet, Mapping
-from itertools import groupby
+from itertools import groupby, product
 from functools import reduce
 from itertools import chain
 
@@ -97,6 +97,9 @@ class TracerouteVertex:
             if other == self:
                 log.warning(f"Successor {other} is equal to its predecessor")
             self.successors.add(other)
+            return True
+
+        return False
 
     def del_successor(self, other: "TracerouteVertex"):
         """Deletes a predecessor of the vertex."""
@@ -118,6 +121,7 @@ class TracerouteVertex:
 
     def traces(self) -> Generator[list["TracerouteVertex"], None, None]:
         "Return all loop-free paths from start to finish."
+
         def _traces(vertex, trace=[]):
             trace = list(trace)
             if vertex in trace:
@@ -127,10 +131,9 @@ class TracerouteVertex:
             if not vertex.successors:
                 yield trace
             for next_vertex in vertex.successors:
-                yield from _traces(next_vertex, trace)    
+                yield from _traces(next_vertex, trace)
 
         yield from _traces(self)
-
 
     def merge(self, other: "TracerouteVertex") -> "TracerouteVertex":
         assert self == other
@@ -240,11 +243,15 @@ class TracerouteHop(HashSet):
 
     def connectTo(self, other: TracerouteVertex):
         assert isinstance(other, TracerouteHop)
+        new_links = 0
 
-        for vertex in self:
-            for next_vertex in other:
-                if vertex.flows & next_vertex.flows:
-                    vertex.add_successor(next_vertex)
+        for vertex, next_vertex in product(self, other):
+            if not vertex.flows & next_vertex.flows:
+                continue
+            if vertex.add_successor(next_vertex):
+                new_links += 1
+
+        return new_links
 
     def __repr__(self):
         return f"Hop(ttl={self.ttl}, len={len(self)})"
