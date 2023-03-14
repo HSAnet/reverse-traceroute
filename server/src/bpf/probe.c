@@ -123,7 +123,10 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
                                   struct ethhdr **eth, iphdr_t **ip)
 {
     struct icmphdr *icmp;
-    __be32 *payload;
+    union {
+        __be32 i32[2];
+        __be16 i16[4];
+    } *payload;
 
     if (resize_l3hdr(cursor, sizeof(*icmp) + sizeof(*payload), eth, ip) < 0)
         return -1;
@@ -145,9 +148,10 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
         pseudo_header(*ip, sizeof(*icmp) + sizeof(*payload), G_PROTO_ICMP);
 #endif
 
-    *payload = 0xffffffff - bpf_htons(((__u16)icmp->type << 8) + icmp->code) -
-               icmp->checksum - icmp->un.echo.id - icmp->un.echo.sequence -
-               seed;
+    payload->i32[0] = bpf_get_prandom_u32();
+    payload->i32[1] = bpf_get_prandom_u32();
+    payload->i16[3] = 0;
+    payload->i16[3] = csum(icmp, sizeof(*icmp) + sizeof(*payload), seed);
 
     return ERR_NONE;
 }
@@ -161,8 +165,11 @@ static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
                                  struct ethhdr **eth, iphdr_t **ip)
 {
     struct udphdr *udp;
-    __be32 *payload;
     __be32 pseudo_hdr;
+    union {
+        __be32 i32[2];
+        __be16 i16[4];
+    } *payload;
 
     if (resize_l3hdr(cursor, sizeof(*udp) + sizeof(*payload), eth, ip) < 0)
         return -1;
@@ -176,10 +183,12 @@ static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
     udp->dest = probe->flow ? probe->flow : bpf_htons(53);
     udp->source = SOURCE_PORT;
     udp->check = probe->identifier;
-    udp->len = bpf_htons(sizeof(*udp) + 4);
+    udp->len = bpf_htons(sizeof(*udp) + sizeof(*payload));
 
-    *payload = 0xffffffff - pseudo_hdr - udp->dest - udp->source - udp->check -
-               udp->len;
+    payload->i32[0] = bpf_get_prandom_u32();
+    payload->i32[1] = bpf_get_prandom_u32();
+    payload->i16[3] = 0;
+    payload->i16[3] = csum(udp, sizeof(*udp) + sizeof(*payload), pseudo_hdr);
 
     return ERR_NONE;
 }
