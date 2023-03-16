@@ -119,23 +119,47 @@ class TracerouteVertex:
 
         yield from _flatten(self)
 
-    def traces(self) -> Generator[list["TracerouteVertex"], None, None]:
-        "Return all loop-free paths from start to finish."
+    def paths(self, on_loop="skip") -> Generator[list["TracerouteVertex"], None, None]:
+        """Return all paths from start to finish."""
 
-        def _traces(vertex, trace=[]):
-            trace = list(trace)
-            if vertex in trace:
-                return
+        def _paths(vertex, path=[]):
+            path = list(path)
 
-            trace.append(vertex)
+            if vertex in path:
+                match on_loop:
+                    case "break": return
+                    case "yield": yield path
+                    case "skip":
+                        loop_start = path.index(vertex)
+                        # When traversing a merged graph, the same address refers to the same object.
+                        # In that case a loop will never reach an end.
+                        # To skip a loop in a merged graph, we simply have to stop processing it.
+                        # For example, the unmerged graph
+                        #
+                        #   'a -> b -> c -> a -> b -> c -> d'
+                        #
+                        # would result in the merged graph
+                        #
+                        #   'a -> b -> c -> d'.
+                        #    ^         |
+                        #    |_________|
+                        #
+                        # When following the (c,a) link we encounter the same 'a' a second time.
+                        # When we simply ignore this path, the next successor of 'c' will be processed,
+                        # effectivly resulting in the sequence 'a -> b -> c -> e', thus skipping the loop.
+                        if id(vertex) == id(path[loop_start]):
+                            return
+                        path = path[:loop_start]
+
+            path.append(vertex)
             if not vertex.successors:
-                yield trace
+                yield path
             for next_vertex in vertex.successors:
-                yield from _traces(next_vertex, trace)
+                yield from _paths(next_vertex, path)
 
-        yield from _traces(self)
+        yield from _paths(self)
 
-    def merge(self, other: "TracerouteVertex") -> "TracerouteVertex":
+    def _merge(self, other: "TracerouteVertex") -> "TracerouteVertex":
         assert self == other
         log.debug(f"Merging {self} with {other}")
 
@@ -152,11 +176,13 @@ class TracerouteVertex:
 
         return self
 
-    def merge_vertices(self):
+    def merge(self):
         """Merges duplicate vertices encountered in a trace.
-        Duplicates vertices can occur in the presence of Unequal-Cost-Load-Balancing."""
+        Duplicates vertices can occur in the presence of Unequal-Cost-Load-Balancing.
+        This method can create hard loops, traverse the sequence with care.
+        It is recommended to use the 'paths' method, which can deal with loops in a configurable way."""
         buckets = [list(g) for k, g in groupby(sorted(self.flatten(), key=hash))]
-        reduced_buckets = [reduce(lambda a, b: a.merge(b), group) for group in buckets]
+        reduced_buckets = [reduce(lambda a, b: a._merge(b), group) for group in buckets]
 
         for vertex in reduced_buckets:
             for v in vertex.successors.copy():

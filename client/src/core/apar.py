@@ -46,7 +46,7 @@ def form_subnets(forward, reverse):
         for subnet, vertices in matches.items():
             if completeness(subnet, vertices) < 0.5:
                 continue
-            for trace in chain(forward.traces(), reverse.traces()):
+            for trace in chain(forward.paths(), reverse.paths()):
                 shared_vertices = set(trace) & vertices
                 if not accuracy(shared_vertices, trace):
                     break
@@ -62,7 +62,7 @@ def form_subnets(forward, reverse):
 
 
 def no_loop(forward, reverse, aliases):
-    for trace in map(set, chain(forward.traces(), reverse.traces())):
+    for trace in map(set, chain(forward.paths(), reverse.paths())):
         if len(trace & aliases) > 1:
             return False
     return True
@@ -108,8 +108,8 @@ def resolved_alias(f_trace, r_trace, f_index, r_index, aliases):
 
 
 def resolve_aliases(forward, reverse, p2p, aliases=[]):
-    forward_traces = list(forward.traces())
-    reverse_traces = list(reverse.traces())
+    forward_traces = list(forward.paths())
+    reverse_traces = list(reverse.paths())
 
     aliases = list(aliases)
     seen_subnets = {}
@@ -155,13 +155,11 @@ def apar(forward, reverse):
     aliases = resolve_aliases(forward, reverse, False)
     aliases = resolve_aliases(forward, reverse, True, aliases)
 
-    """
     with open("traces.txt", "w") as f:
         lines = []
-        for trace in chain(forward.traces(), reverse.traces()):
+        for trace in chain(forward.paths(), reverse.paths()):
             lines += ["#"] + [ v.address for v in trace ]
         f.writelines("\n".join(lines))
-    """
 
     log.info(f"{aliases=}")
     return aliases

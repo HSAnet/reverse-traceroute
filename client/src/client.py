@@ -35,7 +35,7 @@ from .graph import create_graph
 from .args import parse_arguments
 from .transmit import transmit_measurement
 
-from .core.merge import apar
+from .core.apar import apar
 
 
 logging.getLogger("graphviz").setLevel(logging.ERROR)
@@ -84,6 +84,7 @@ def create_measurement(
     args: argparse.Namespace,
     traces: dict[str, TracerouteVertex],
     hostnames: dict[str, str],
+    alias_buckets: list[set[TracerouteVertex]],
 ):
     return {
         **create_measurement_args(args),
@@ -94,6 +95,10 @@ def create_measurement(
             for direction, trace in traces.items()
         },
         "hostnames": hostnames,
+        "aliases": [
+            [ hash(v) for v in alias_set ]
+            for alias_set in alias_buckets
+        ]
     }
 
 
@@ -176,10 +181,12 @@ def render_graph(
     traces: dict[str, TracerouteVertex],
     hostnames: dict[str, str],
     output: str,
+    merge: bool,
 ):
     parent = graphviz.Digraph(strict=True)
     for direction, trace in traces.items():
         with parent.subgraph(name=f"cluster_{direction}") as g:
+            if merge: trace.merge()
             g.node_attr.update(style="filled")
             g.attr(label=direction.upper())
             create_graph(g, trace, hostnames)
@@ -258,33 +265,36 @@ def main():
         root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
         traces["reverse"] = root
 
+    # Resolve hostnames
     hostnames = {}
     if not args.no_resolve:
         for trace in traces.values():
             hostnames.update(resolve_hostnames(trace))
 
-    measurement = create_measurement(args, traces, hostnames)
-    render_graph(traces, hostnames, args.output)
-
-    if args.merge in ("address", "router"):
-        for trace in traces.values():
-            trace.merge_vertices()
-    if args.merge in "router":
+    # Resolve aliases
+    alias_buckets = []
+    if args.resolve_aliases and args.direction == "two-way":
         alias_buckets = apar(traces["forward"], traces["reverse"])
-        with open(f"{args.output}_aliases.txt", "w") as f:
-            for aliases in alias_buckets:
-                f.write(",".join(v.address for v in aliases) + "\n")
+        with open(f"{args.output}" + "_aliases.txt", "w") as f:
+            f.write(
+                "\n".join(
+                    ",".join(v.address for v in alias_set)
+                    for alias_set in alias_buckets
+                )
+            )
 
+    # Create the measurement before merging the graph.
+    # Should the merging algorithm change, the measurements
+    # still remain valid and unchanged.
+    measurement = create_measurement(args, traces, hostnames, alias_buckets)
     if args.store_json:
         with open(f"{args.output}.json", "w") as writer:
             json.dump(measurement, writer, indent=4)
-
     if args.transmit:
         transmit = args.assume_yes or prompt_confirm(
             "Due to the --transmit flag, "
             + "your data will be uploaded to the HSA-Net group."
         )
-
         if transmit:
             try:
                 transmit_measurement(measurement)
@@ -298,3 +308,6 @@ def main():
                 )
         else:
             print("Aborting transmission!")
+
+    # Finally, render the graph.
+    render_graph(traces, hostnames, args.output, not args.no_merge)

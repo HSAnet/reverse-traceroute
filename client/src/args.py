@@ -77,11 +77,14 @@ def parse_arguments() -> argparse.Namespace:
         help="Do not perform a reverse DNS lookup on the IP addresses.",
     )
     parser.add_argument(
-        "-m",
-        "--merge",
-        choices=("none", "address", "router"),
-        default="address",
-        help="Choose how to merge the vertices.",
+        "--no-merge",
+        action="store_true",
+        help="Do not merge the vertices before printing the graph.",
+    ),
+    parser.add_argument(
+        "--resolve-aliases",
+        action="store_true",
+        help="Resolve router level aliases.",
     )
     parser.add_argument(
         "-o",
@@ -122,8 +125,7 @@ def parse_arguments() -> argparse.Namespace:
 
     algo_parsers = parser.add_subparsers(dest="engine", required=True)
     multipath_parser = algo_parsers.add_parser(
-        "multipath",
-        help="Detect multiple paths.",
+        "multipath", help="Detect multiple paths."
     )
     multipath_parser.add_argument(
         "--retry",
@@ -155,8 +157,7 @@ def parse_arguments() -> argparse.Namespace:
         help="The maximum burst size to send to a hop.",
     )
     singlepath_parser = algo_parsers.add_parser(
-        "singlepath",
-        help="Illuminate a single path.",
+        "singlepath", help="Illuminate a single path."
     )
     singlepath_parser.add_argument(
         "--flow",
