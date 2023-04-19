@@ -155,11 +155,14 @@ def apar(forward, reverse):
     aliases = resolve_aliases(forward, reverse, False)
     aliases = resolve_aliases(forward, reverse, True, aliases)
 
+    # Uncomment below lines for a comparison with KAPAR
+    """
     with open("traces.txt", "w") as f:
         lines = []
         for trace in chain(forward.paths(), reverse.paths()):
             lines += ["#"] + [ v.address for v in trace ]
         f.writelines("\n".join(lines))
+    """
 
     log.info(f"{aliases=}")
     return aliases

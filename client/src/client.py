@@ -84,7 +84,6 @@ def create_measurement(
     args: argparse.Namespace,
     traces: dict[str, TracerouteVertex],
     hostnames: dict[str, str],
-    alias_buckets: list[set[TracerouteVertex]],
 ):
     return {
         **create_measurement_args(args),
@@ -95,10 +94,6 @@ def create_measurement(
             for direction, trace in traces.items()
         },
         "hostnames": hostnames,
-        "aliases": [
-            [ hash(v) for v in alias_set ]
-            for alias_set in alias_buckets
-        ]
     }
 
 
@@ -186,7 +181,8 @@ def render_graph(
     parent = graphviz.Digraph(strict=True)
     for direction, trace in traces.items():
         with parent.subgraph(name=f"cluster_{direction}") as g:
-            if merge: trace.merge()
+            if merge:
+                trace.merge()
             g.node_attr.update(style="filled")
             g.attr(label=direction.upper())
             create_graph(g, trace, hostnames)
@@ -241,7 +237,7 @@ def main():
         probe_gen = ClassicProbeGen(target, args.protocol)
         root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
         traces["forward"] = root
-    if args.direction in  ("two-way", "reverse"):
+    if args.direction in ("two-way", "reverse"):
         probe_gen = ReverseProbeGen(target, args.protocol)
 
         # By requesting a probe with a TTL of 0 an error condition is created.
@@ -272,21 +268,25 @@ def main():
             hostnames.update(resolve_hostnames(trace))
 
     # Resolve aliases
-    alias_buckets = []
-    if args.resolve_aliases and args.direction == "two-way":
-        alias_buckets = apar(traces["forward"], traces["reverse"])
-        with open(f"{args.output}" + "_aliases.txt", "w") as f:
-            f.write(
-                "\n".join(
-                    ",".join(v.address for v in alias_set)
-                    for alias_set in alias_buckets
+    if args.resolve_aliases:
+        if args.direction == "two-way" and isinstance(ip_address(target), IPv4Address):
+            alias_buckets = apar(traces["forward"], traces["reverse"])
+            with open(f"{args.output}" + ".aliases", "w") as f:
+                f.write(
+                    "\n".join(
+                        ",".join(v.address for v in alias_set)
+                        for alias_set in alias_buckets
+                    )
                 )
+        else:
+            log.warn(
+                "Ignoring the '--resolve-aliases' flag as alias resolution is only supported for two-way IPv4 traces."
             )
 
     # Create the measurement before merging the graph.
     # Should the merging algorithm change, the measurements
     # still remain valid and unchanged.
-    measurement = create_measurement(args, traces, hostnames, alias_buckets)
+    measurement = create_measurement(args, traces, hostnames)
     if args.store_json:
         with open(f"{args.output}.json", "w") as writer:
             json.dump(measurement, writer, indent=4)
