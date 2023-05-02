@@ -109,9 +109,9 @@ static int handle(struct cursor *cursor)
     iphdr_t *ip;
 
     if (PARSE(cursor, &eth) < 0)
-        goto no_match;
+        goto pass;
     if (PARSE_IP(cursor, &ip) < 0)
-        goto no_match;
+        goto pass;
 
     // Initialize variables to default values.
     // These will be overwritten if a nested ICMP-packet is received.
@@ -127,7 +127,7 @@ static int handle(struct cursor *cursor)
         cursor_clone(cursor, &l3_cursor);
 
         if (PARSE(cursor, &icmp) < 0)
-            goto no_match;
+            goto pass;
 
         if (icmp->type == G_ICMP_ECHO_REQUEST && icmp->code == 1) {
             return handle_request(cursor, &eth, &ip, &icmp);
@@ -135,7 +135,7 @@ static int handle(struct cursor *cursor)
                    icmp->type == G_ICMP_DEST_UNREACH) {
             iphdr_t *inner_ip;
             if ((ret = PARSE_IP(cursor, &inner_ip)) < 0)
-                goto no_match;
+                goto pass;
 
             proto = IP_NEXTHDR(*inner_ip);
             session.addr = inner_ip->daddr;
@@ -149,12 +149,12 @@ static int handle(struct cursor *cursor)
 
     // Check if the packet could be an answer to a probe.
     if ((ret = probe_match(cursor, proto, is_request)) < 0)
-        goto no_match;
+        goto pass;
     session.identifier = ret;
 
     state = session_find(&session);
     if (!state)
-        goto no_match;
+        goto drop;
 
     log_message(SESSION_PROBE_ANSWERED, &session);
     session_delete(&session);
@@ -167,7 +167,7 @@ static int handle(struct cursor *cursor)
     // The kernel having never seen an associated packet will issue an RST.
     if (proto == IPPROTO_TCP && !is_request)
         if (skb_copy_to_ingress(cursor, &eth, &ip) < 0)
-            goto exit;
+            goto drop;
 
     // Remove the session from our table and respond to the original requestor.
     // Note: It is safe to access map elements after a delete call as execution
@@ -176,14 +176,14 @@ static int handle(struct cursor *cursor)
     // program execution ends.
     ret = response_create(cursor, &session, state, &eth, &ip);
     if (ret < 0)
-        goto exit;
+        goto drop;
     return bpf_redirect(cursor->skb->ifindex, 0);
 
-// Jump here if packet has not been changed.
-no_match:
+// Jump here to allow the packet to proceed.
+pass:
     return TC_ACT_OK;
-// Jump here if packet has been changed.
-exit:
+// Jump here to drop the packet.
+drop:
     return TC_ACT_SHOT;
 }
 

@@ -29,7 +29,7 @@ struct {
     __uint(max_entries, 128 * 1024);
 } log_buf SEC(".maps");
 
-INTERNAL void log_message(enum message_type type, struct session_key *key)
+INTERNAL void log_message(enum message_type type, const struct session_key *key)
 {
     struct message *msg =
         bpf_ringbuf_reserve(&log_buf, sizeof(struct message), 0);

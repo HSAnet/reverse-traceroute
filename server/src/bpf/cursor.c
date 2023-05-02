@@ -20,12 +20,12 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include "cursor.h"
 #include <linux/bpf.h>
 
-INTERNAL long cursor_start(struct cursor *cursor)
+INTERNAL long cursor_start(const struct cursor *cursor)
 {
     return cursor->skb->data;
 }
 
-INTERNAL long cursor_end(struct cursor *cursor)
+INTERNAL long cursor_end(const struct cursor *cursor)
 {
     return cursor->skb->data_end;
 }
@@ -41,7 +41,7 @@ INTERNAL void cursor_init(struct cursor *cursor, struct __sk_buff *skb)
     cursor_reset(cursor);
 }
 
-INTERNAL void cursor_clone(struct cursor *original, struct cursor *clone)
+INTERNAL void cursor_clone(const struct cursor *original, struct cursor *clone)
 {
     *clone = *original;
 }

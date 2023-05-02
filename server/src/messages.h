@@ -25,6 +25,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <sys/socket.h>
 
 enum message_type {
+    SESSION_EXISTS,
     SESSION_CREATED,
     SESSION_DELETED,
     SESSION_TIMEOUT,

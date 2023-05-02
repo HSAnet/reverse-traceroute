@@ -100,7 +100,7 @@ help:
     return -1;
 }
 
-static struct traceroute *traceroute_init(struct args *args)
+static struct traceroute *traceroute_init(const struct args *args)
 {
     struct rlimit mem_limit = {
         .rlim_cur = RLIM_INFINITY,
@@ -149,7 +149,7 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 
 static int log_message(void *ctx, void *data, size_t size)
 {
-    struct message *msg = data;
+    const struct message *msg = data;
 
     char address[ADDRSTRLEN];
     if (!inet_ntop(ADDR_FAMILY, &msg->data.address, address, sizeof(address)))
@@ -157,25 +157,27 @@ static int log_message(void *ctx, void *data, size_t size)
 
     printf("[%*s, %5u] | ", ADDRSTRLEN, address, msg->data.probe_id);
     switch (msg->type) {
+    case SESSION_EXISTS:
+        printf("session exists.\n");
+        break;
     case SESSION_CREATED:
-        printf("session created.");
+        printf("session created.\n");
         break;
     case SESSION_DELETED:
-        printf("session deleted.");
+        printf("session deleted.\n");
         break;
     case SESSION_TIMEOUT:
-        printf("session timed out.");
+        printf("session timed out.\n");
         break;
     case SESSION_BUFFER_FULL:
-        printf("session buffer full.");
+        printf("session buffer full.\n");
         break;
     case SESSION_PROBE_ANSWERED:
-        printf("probe answer received.");
+        printf("probe answer received.\n");
         break;
     }
-    printf("\n");
+    
     fflush(stdout);
-
     return 0;
 }
 
@@ -232,16 +234,16 @@ int main(int argc, char **argv)
     while (!exiting) {
         ret = ring_buffer__poll(log_buf, 100);
         if (ret == -EINTR) {
-            ret = 0;
             break;
         } else if (ret < 0) {
             fprintf(stderr, "Failed to poll the logging buffer.\n");
-            break;
+            goto free;
         }
     }
-    ring_buffer__free(log_buf);
 
     ret = EXIT_SUCCESS;
+free:
+    ring_buffer__free(log_buf);
 detach:
     opts.flags = opts.prog_fd = opts.prog_id = 0;
     bpf_tc_detach(&hook, &opts);

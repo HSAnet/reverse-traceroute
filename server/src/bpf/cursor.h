@@ -28,11 +28,11 @@ struct cursor {
     void *pos;
 };
 
-INTERNAL long cursor_start(struct cursor *cursor);
-INTERNAL long cursor_end(struct cursor *cursor);
+INTERNAL long cursor_start(const struct cursor *cursor);
+INTERNAL long cursor_end(const struct cursor *cursor);
 INTERNAL void cursor_reset(struct cursor *cursor);
 INTERNAL void cursor_init(struct cursor *cursor, struct __sk_buff *skb);
-INTERNAL void cursor_clone(struct cursor *original, struct cursor *clone);
+INTERNAL void cursor_clone(const struct cursor *original, struct cursor *clone);
 
 #define PARSE(cursor, hdr)                                                     \
     ({                                                                         \
