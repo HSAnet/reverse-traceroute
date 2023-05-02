@@ -182,7 +182,7 @@ then please let us know so that we can add your server to the list of endpoints,
 which are maintained inside the `ENDPOINTS` file.
 
 ## Future work
-* Introduce alias resolution to match nodes on both the forward and reverse path
+* Allow the client to (optionally) request a traceroute to another address
 
 ## Disclaimer
 Both the client and the server are subject to change, as they are still early in development.
