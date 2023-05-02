@@ -18,7 +18,7 @@ If not, see <https://www.gnu.org/licenses/>.
 import logging
 from typing import Generator
 from collections.abc import MutableSet, Mapping
-from itertools import groupby
+from itertools import groupby, product
 from functools import reduce
 from itertools import chain
 
@@ -97,6 +97,9 @@ class TracerouteVertex:
             if other == self:
                 log.warning(f"Successor {other} is equal to its predecessor")
             self.successors.add(other)
+            return True
+
+        return False
 
     def del_successor(self, other: "TracerouteVertex"):
         """Deletes a predecessor of the vertex."""
@@ -116,7 +119,47 @@ class TracerouteVertex:
 
         yield from _flatten(self)
 
-    def merge(self, other: "TracerouteVertex") -> "TracerouteVertex":
+    def paths(self, on_loop="skip") -> Generator[list["TracerouteVertex"], None, None]:
+        """Return all paths from start to finish."""
+
+        def _paths(vertex, path=[]):
+            path = list(path)
+
+            if vertex in path:
+                match on_loop:
+                    case "break": return
+                    case "yield": yield path
+                    case "skip":
+                        loop_start = path.index(vertex)
+                        # When traversing a merged graph, the same address refers to the same object.
+                        # In that case a loop will never reach an end.
+                        # To skip a loop in a merged graph, we simply have to stop processing it.
+                        # For example, the unmerged graph
+                        #
+                        #   'a -> b -> c -> a -> b -> c -> d'
+                        #
+                        # would result in the merged graph
+                        #
+                        #   'a -> b -> c -> d'.
+                        #    ^         |
+                        #    |_________|
+                        #
+                        # When following the (c,a) link we encounter the same 'a' a second time.
+                        # When we simply ignore this path, the next successor of 'c' will be processed,
+                        # effectivly resulting in the sequence 'a -> b -> c -> e', thus skipping the loop.
+                        if id(vertex) == id(path[loop_start]):
+                            return
+                        path = path[:loop_start]
+
+            path.append(vertex)
+            if not vertex.successors:
+                yield path
+            for next_vertex in vertex.successors:
+                yield from _paths(next_vertex, path)
+
+        yield from _paths(self)
+
+    def _merge(self, other: "TracerouteVertex") -> "TracerouteVertex":
         assert self == other
         log.debug(f"Merging {self} with {other}")
 
@@ -133,11 +176,13 @@ class TracerouteVertex:
 
         return self
 
-    def merge_vertices(self):
+    def merge(self):
         """Merges duplicate vertices encountered in a trace.
-        Duplicates vertices can occur in the presence of Unequal-Cost-Load-Balancing."""
+        Duplicates vertices can occur in the presence of Unequal-Cost-Load-Balancing.
+        This method can create hard loops, traverse the sequence with care.
+        It is recommended to use the 'paths' method, which can deal with loops in a configurable way."""
         buckets = [list(g) for k, g in groupby(sorted(self.flatten(), key=hash))]
-        reduced_buckets = [reduce(lambda a, b: a.merge(b), group) for group in buckets]
+        reduced_buckets = [reduce(lambda a, b: a._merge(b), group) for group in buckets]
 
         for vertex in reduced_buckets:
             for v in vertex.successors.copy():
@@ -224,11 +269,15 @@ class TracerouteHop(HashSet):
 
     def connectTo(self, other: TracerouteVertex):
         assert isinstance(other, TracerouteHop)
+        new_links = 0
 
-        for vertex in self:
-            for next_vertex in other:
-                if vertex.flows & next_vertex.flows:
-                    vertex.add_successor(next_vertex)
+        for vertex, next_vertex in product(self, other):
+            if not vertex.flows & next_vertex.flows:
+                continue
+            if vertex.add_successor(next_vertex):
+                new_links += 1
+
+        return new_links
 
     def __repr__(self):
         return f"Hop(ttl={self.ttl}, len={len(self)})"

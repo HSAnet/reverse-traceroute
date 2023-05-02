@@ -34,6 +34,9 @@ ICMPv6EchoReply.answers = (
 
 TracerouteResult = namedtuple("TracerouteResult", ["address", "rtt"])
 
+# Port assigned for traceroute use by IANA.
+# This is the default outgoing source port for classic probes.
+TRACEROUTE_PORT = 33434
 
 class AbstractProbeGen:
     def __init__(self, target: str, protocol: str):
@@ -86,11 +89,11 @@ class ClassicProbeGen(AbstractProbeGen):
                 )
 
         elif self.protocol == "udp":
-            l3 = UDP(dport=flow, sport=1021, chksum=probe_id) / struct.pack("!H", 0)
+            l3 = UDP(dport=flow, sport=TRACEROUTE_PORT, chksum=probe_id) / struct.pack("!H", 0)
             l3.load = struct.pack("!H", self.chksum(socket.IPPROTO_UDP, ip, bytes(l3)))
 
         elif self.protocol == "tcp":
-            l3 = TCP(dport=flow, sport=1021, seq=probe_id)
+            l3 = TCP(dport=flow, sport=TRACEROUTE_PORT, seq=probe_id)
 
         return ip / l3
 
@@ -132,6 +135,11 @@ class ReverseProbeGen(AbstractProbeGen):
 
     def __init__(self, target: str, protocol: str):
         super().__init__(target, protocol)
+        # Reuse identifiers which were answered by the server.
+        # This reduces the number of entries to be maintained by a client-sided NAPT middlebox.
+        # By using the last reclaimed identifier first (LIFO), we maximize the likelihood of
+        # hitting an active NAPT entry, which eliminates the overhead to create a new one.
+        self._reclaimed_identifiers = []
 
     def create_probe(self, ttl: int, flow: int) -> Packet:
         protocol = {
@@ -140,7 +148,11 @@ class ReverseProbeGen(AbstractProbeGen):
             "tcp": socket.IPPROTO_TCP,
         }[self.protocol]
 
-        probe_id = next(self._probe_id)
+        probe_id = (
+            self._reclaimed_identifiers.pop()
+            if self._reclaimed_identifiers
+            else next(self._probe_id)
+        )
         header = struct.pack("!BBH", ttl, protocol, flow)
         if self.is_ipv4:
             return (
@@ -156,10 +168,13 @@ class ReverseProbeGen(AbstractProbeGen):
     def parse_probe_response(
         self, request: Packet, response: Packet
     ) -> TracerouteResult:
+        icmp = response.getlayer(1)
         response_type = 0 if self.is_ipv4 else 129
-        if response.type == response_type and response.code == 1:
+
+        if icmp.type == response_type and icmp.code == 1:
+            self._reclaimed_identifiers.append(icmp.id)
             try:
-                load = response.load if self.is_ipv4 else response.data
+                load = icmp.load if self.is_ipv4 else icmp.data
                 status, _ = struct.unpack("BB", load[:2])
 
                 if status == 0x00:

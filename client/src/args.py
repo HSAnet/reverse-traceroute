@@ -82,6 +82,11 @@ def parse_arguments() -> argparse.Namespace:
         help="Do not merge the vertices before printing the graph.",
     ),
     parser.add_argument(
+        "--resolve-aliases",
+        action="store_true",
+        help="Resolve router level aliases.",
+    )
+    parser.add_argument(
         "-o",
         "--output",
         type=str,

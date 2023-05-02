@@ -35,6 +35,8 @@ from .graph import create_graph
 from .args import parse_arguments
 from .transmit import transmit_measurement
 
+from .core.apar import apar
+
 
 logging.getLogger("graphviz").setLevel(logging.ERROR)
 
@@ -173,15 +175,17 @@ def discover(
 def render_graph(
     traces: dict[str, TracerouteVertex],
     hostnames: dict[str, str],
-    merge: bool,
     output: str,
+    merge: bool,
 ):
     parent = graphviz.Digraph(strict=True)
     for direction, trace in traces.items():
         with parent.subgraph(name=f"cluster_{direction}") as g:
+            if merge:
+                trace.merge()
             g.node_attr.update(style="filled")
             g.attr(label=direction.upper())
-            create_graph(g, trace, hostnames, merge)
+            create_graph(g, trace, hostnames)
     parent.render(output, cleanup=True)
 
 
@@ -229,12 +233,11 @@ def main():
     engine = create_probing_engine(args)
     traces = {}
 
-    if args.direction == "two-way" or args.direction == "forward":
+    if args.direction in ("two-way", "forward"):
         probe_gen = ClassicProbeGen(target, args.protocol)
         root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
         traces["forward"] = root
-
-    if args.direction == "two-way" or args.direction == "reverse":
+    if args.direction in ("two-way", "reverse"):
         probe_gen = ReverseProbeGen(target, args.protocol)
 
         # By requesting a probe with a TTL of 0 an error condition is created.
@@ -258,24 +261,40 @@ def main():
         root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
         traces["reverse"] = root
 
+    # Resolve hostnames
     hostnames = {}
     if not args.no_resolve:
         for trace in traces.values():
             hostnames.update(resolve_hostnames(trace))
 
-    measurement = create_measurement(args, traces, hostnames)
-    render_graph(traces, hostnames, not args.no_merge, args.output)
+    # Resolve aliases
+    if args.resolve_aliases:
+        if args.direction == "two-way" and isinstance(ip_address(target), IPv4Address):
+            alias_buckets = apar(traces["forward"], traces["reverse"])
+            with open(f"{args.output}" + ".aliases", "w") as f:
+                f.write(
+                    "\n".join(
+                        ",".join(v.address for v in alias_set)
+                        for alias_set in alias_buckets
+                    )
+                )
+        else:
+            log.warn(
+                "Ignoring the '--resolve-aliases' flag as alias resolution is only supported for two-way IPv4 traces."
+            )
 
+    # Create the measurement before merging the graph.
+    # Should the merging algorithm change, the measurements
+    # still remain valid and unchanged.
+    measurement = create_measurement(args, traces, hostnames)
     if args.store_json:
         with open(f"{args.output}.json", "w") as writer:
             json.dump(measurement, writer, indent=4)
-
     if args.transmit:
         transmit = args.assume_yes or prompt_confirm(
             "Due to the --transmit flag, "
             + "your data will be uploaded to the HSA-Net group."
         )
-
         if transmit:
             try:
                 transmit_measurement(measurement)
@@ -289,3 +308,6 @@ def main():
                 )
         else:
             print("Aborting transmission!")
+
+    # Finally, render the graph.
+    render_graph(traces, hostnames, args.output, not args.no_merge)
