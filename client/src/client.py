@@ -176,6 +176,7 @@ def render_graph(
     traces: dict[str, TracerouteVertex],
     hostnames: dict[str, str],
     output: str,
+    format: str,
     merge: bool,
 ):
     parent = graphviz.Digraph(strict=True)
@@ -186,7 +187,7 @@ def render_graph(
             g.node_attr.update(style="filled")
             g.attr(label=direction.upper())
             create_graph(g, trace, hostnames)
-    parent.render(output, cleanup=True)
+    parent.render(output, format=format, cleanup=True)
 
 
 def try_getaddrinfo(target: str, family: int) -> tuple[bool, tuple]:
@@ -310,4 +311,5 @@ def main():
             print("Aborting transmission!")
 
     # Finally, render the graph.
-    render_graph(traces, hostnames, args.output, not args.no_merge)
+    render_graph(traces, hostnames, args.output, args.format, not args.no_merge)
+    print(f"Results written to {args.output}.{args.format}")

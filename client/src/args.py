@@ -99,6 +99,14 @@ def parse_arguments() -> argparse.Namespace:
         choices=("debug", "info", "warning"),
         default="info",
     )
+    parser.add_argument(
+        "-f",
+        "--format",
+        choices=("dot", "gif", "jpg", "pdf", "png", "ps", "svg"),
+        dest="format",
+        default="pdf",
+        help="output filetype",
+    )
 
     stats_group = parser.add_argument_group("statistics")
     stats_group.add_argument(
