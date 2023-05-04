@@ -255,13 +255,7 @@ class MultipathEngine(AbstractEngine):
         """Generates flow sets until an optimal stopping point is reached."""
 
         def generate():
-            prev_flows = hop.flows
-            yield from prev_flows
-
-            remaining_flows = list(self.flow_range - prev_flows)
-            random.shuffle(remaining_flows)
-            yield from remaining_flows
-
+            yield from range(10000, 65535)
             log.warn(f"Exhausted all possible flows for {hop=}")
 
         start = 0
@@ -302,10 +296,20 @@ class MultipathEngine(AbstractEngine):
                         hop.first().shadow_flow_set.update(missing_flows)
                     else:
                         send_probes()
-                        hop.first().shadow_flow_set.update(missing_flows - hop.flows)
                 else:
                     send_probes()
 
+            # The rationale behind stopping when no more *NEW* links are detected
+            # is that when at a given hop one node hits rate-limiting, the distribution
+            # of answered probes starts to shift.
+            # The flow generator uses said distribution to calculate the number of new flows
+            # needed to reach the successors of each node in question, resulting in a higher
+            # number of flows needed for the rate-limited node as less probes are known to 'reach' it.
+            # In each following iteration the distribution gets more unbalanced, as the rate-limited node
+            # is not attributed any new probes whilst the likelihood of reaching the other nodes increases
+            # with each answered probe, resulting in statistically more probes needed for the rate-limited node
+            # to reach it's successors.
+            # By stopping the probing when no new links were detected in an iteration said problem is eliminated.
             if hop.connectTo(next_hop) == 0:
                 log.warn("No more links detected. Breaking from send loop.")
                 break
