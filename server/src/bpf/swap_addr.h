@@ -24,7 +24,8 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include "ip_generic.h"
 
 INTERNAL void swap_addr_ethhdr(struct ethhdr *ethhdr);
-INTERNAL void swap_addr_iphdr(iphdr_t *iphdr);
-INTERNAL void swap_addr(struct ethhdr *eth, iphdr_t *ip);
+INTERNAL void swap_addr_iphdr(iphdr_t *iphdr, const ipaddr_t *target);
+INTERNAL void swap_addr(struct ethhdr *eth, iphdr_t *ip,
+                        const ipaddr_t *target);
 
 #endif

@@ -32,7 +32,28 @@ struct session_key {
 
 struct session_state {
     __u64 timestamp_ns;
+    ipaddr_t origin;
+#if defined(TRACEROUTE_V4)
+    __u32 padding;
+#endif
 };
+
+#define SESSION_NEW_KEY(x, y)                                                  \
+    {                                                                          \
+        .padding = 0, .addr = (x), .identifier = (y)                           \
+    }
+
+#if defined(TRACEROUTE_V4)
+#define SESSION_NEW_STATE(x, y)                                                \
+    {                                                                          \
+        .padding = 0, .timestamp_ns = (x), .origin = (y)                       \
+    }
+#elif defined(TRACEROUTE_V6)
+#define SESSION_NEW_STATE(x, y)                                                \
+    {                                                                          \
+        .timestamp_ns = (x), .origin = (y)                                     \
+    }
+#endif
 
 INTERNAL int session_delete(const struct session_key *session);
 INTERNAL struct session_state *session_find(const struct session_key *key);

@@ -27,7 +27,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 struct cursor;
 struct ethhdr;
 
-#define SOURCE_PORT bpf_htons(1021)
+#define SOURCE_PORT    bpf_htons(1021)
 #define ICMP_PROBE_SEQ 0xffff
 
 struct probe {
@@ -50,7 +50,9 @@ typedef enum {
 } probe_error;
 
 INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
-                          struct ethhdr **eth, iphdr_t **ip);
-INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request);
+                          struct ethhdr **eth, iphdr_t **ip,
+                          const ipaddr_t *target);
+INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request,
+                         __u32 *const identifier);
 
 #endif

@@ -176,7 +176,7 @@ static int log_message(void *ctx, void *data, size_t size)
         printf("probe answer received.\n");
         break;
     }
-    
+
     fflush(stdout);
     return 0;
 }

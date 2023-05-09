@@ -22,6 +22,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 #include <linux/ipv6.h>
 #include <linux/types.h>
+#include <asm/byteorder.h>
 
 union trhdr {
     struct {
@@ -39,6 +40,24 @@ union trhdr {
 struct trhdr_payload {
     struct in6_addr addr;
     __u64 timespan_ns;
+} __attribute__((packed));
+
+struct icmp_multipart_hdr {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+    __u16 reserved : 12, version : 4;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+    __u16 reserved : 12, version : 4;
+#else
+#error "Expected defines in <asm/byteorder.h>."
+#endif
+
+    __be16 checksum;
+} __attribute__((packed));
+
+struct icmp_multipart_extension {
+    __be16 length;
+    __u8 class_num;
+    __u8 class_type;
 } __attribute__((packed));
 
 #endif

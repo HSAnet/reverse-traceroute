@@ -33,9 +33,8 @@ volatile const __u64 TIMEOUT_NS = DEFAULT_TIMEOUT_NS;
 // The internally used state consists of the usual state and a timer.
 // The timer should not be exposed as part of the regular state.
 struct __session_state {
-    struct session_state state;
-    __u16 padding;
     struct bpf_timer timer;
+    struct session_state state;
 };
 
 // Dictionary of sessions and associated times.
@@ -78,8 +77,7 @@ INTERNAL int session_add(const struct session_key *session,
                          const struct session_state *state)
 {
     int ret;
-    struct __session_state __state = {.state = *state, .padding = 0},
-                           *state_ptr;
+    struct __session_state __state = {.state = *state}, *state_ptr;
 
     ret = bpf_map_update_elem(&map_sessions, session, &__state, BPF_NOEXIST);
     if (ret) {

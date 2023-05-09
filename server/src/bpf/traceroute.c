@@ -36,28 +36,51 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
  * the originator. Otherwise a response notifying the originator about the
  * invalid configuration is dispatched.
  */
+
 static int handle_request(struct cursor *cursor, struct ethhdr **eth,
                           iphdr_t **ip, struct icmphdr **icmp)
 {
     int err;
     union trhdr *tr;
-    struct probe_args probe_args;
 
-    struct session_key session = {.padding = 0};
-    struct session_state state = {.timestamp_ns = bpf_ktime_get_ns()};
+    struct icmp_multipart_hdr *multipart_hdr;
+    struct icmp_multipart_extension *extension_obj;
+    ipaddr_t target = (**ip).saddr;
 
     if (PARSE(cursor, &tr) < 0)
         return TC_ACT_OK;
 
-    session.addr = (*ip)->saddr;
-    session.identifier = (*icmp)->un.echo.id;
+    if (PARSE(cursor, &multipart_hdr) == 0) {
+        if (multipart_hdr->version == 2 && PARSE(cursor, &extension_obj) == 0) {
+            __u16 ext_length = bpf_ntohs(extension_obj->length);
 
-    probe_args.ttl = tr->request.ttl;
-    probe_args.proto = tr->request.proto;
-    probe_args.probe.flow = tr->request.flow;
-    probe_args.probe.identifier = (*icmp)->un.echo.id;
+            if (ext_length ==
+                sizeof(struct in6_addr) + sizeof(*extension_obj)) {
+                struct in6_addr *ext_addr;
+                if (PARSE(cursor, &ext_addr) == 0) {
+#if defined(TRACEROUTE_V4)
+                    // TODO: Check for mapped address format
+                    target = ext_addr->in6_u.u6_addr32[3];
+#elif defined(TRACEROUTE_V6)
+                    target = *ext_addr;
+#endif
+                }
+            }
+        }
+    }
 
-    if ((err = probe_create(cursor, &probe_args, eth, ip)) < 0)
+    struct session_key session = SESSION_NEW_KEY(target, (*icmp)->un.echo.id);
+    struct session_state state =
+        SESSION_NEW_STATE(bpf_ktime_get_ns(), (**ip).saddr);
+
+    struct probe_args probe_args = {
+        .ttl = tr->request.ttl,
+        .proto = tr->request.proto,
+        .probe.flow = tr->request.flow,
+        .probe.identifier = (*icmp)->un.echo.id,
+    };
+
+    if ((err = probe_create(cursor, &probe_args, eth, ip, &target)) < 0)
         return TC_ACT_SHOT;
 
     if (err == ERR_NONE) {
@@ -96,15 +119,6 @@ static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
  */
 static int handle(struct cursor *cursor)
 {
-    int ret;
-    __u8 proto;
-    __u8 is_request;
-
-    struct session_key session = {.padding = 0};
-    struct session_state *state;
-
-    struct cursor l3_cursor;
-
     struct ethhdr *eth;
     iphdr_t *ip;
 
@@ -115,15 +129,16 @@ static int handle(struct cursor *cursor)
 
     // Initialize variables to default values.
     // These will be overwritten if a nested ICMP-packet is received.
-    is_request = 0;
-    session.addr = ip->saddr;
-    proto = IP_NEXTHDR(*ip);
+    __u8 is_request = 0;
+    ipaddr_t target = ip->saddr;
 
+    __u8 proto = IP_NEXTHDR(*ip);
     if (proto == G_PROTO_ICMP) {
         struct icmphdr *icmp;
 
         // Clone the cursor before parsing the ICMP-header.
         // It may be reset to this position later.
+        struct cursor l3_cursor;
         cursor_clone(cursor, &l3_cursor);
 
         if (PARSE(cursor, &icmp) < 0)
@@ -134,25 +149,26 @@ static int handle(struct cursor *cursor)
         } else if ((icmp->type == G_ICMP_TIME_EXCEEDED && icmp->code == 0) ||
                    icmp->type == G_ICMP_DEST_UNREACH) {
             iphdr_t *inner_ip;
-            if ((ret = PARSE_IP(cursor, &inner_ip)) < 0)
+            if (PARSE_IP(cursor, &inner_ip) < 0)
                 goto pass;
 
             proto = IP_NEXTHDR(*inner_ip);
-            session.addr = inner_ip->daddr;
+            target = inner_ip->daddr;
             is_request = 1;
         } else {
             // Reset cursor in front of the ICMP header, so it can be properly
             // parsed.
-            cursor = &l3_cursor;
+            *cursor = l3_cursor;
         }
     }
 
     // Check if the packet could be an answer to a probe.
-    if ((ret = probe_match(cursor, proto, is_request)) < 0)
+    __u32 identifier;
+    if (probe_match(cursor, proto, is_request, &identifier) < 0)
         goto pass;
-    session.identifier = ret;
 
-    state = session_find(&session);
+    struct session_key session = SESSION_NEW_KEY(target, identifier);
+    struct session_state *state = session_find(&session);
     if (!state)
         goto drop;
 
@@ -174,8 +190,7 @@ static int handle(struct cursor *cursor)
     // takes places under an RCU read lock.
     // Data associated with the deleted map entry will be reclaimed after
     // program execution ends.
-    ret = response_create(cursor, &session, state, &eth, &ip);
-    if (ret < 0)
+    if (response_create(cursor, &session, state, &eth, &ip) < 0)
         goto drop;
     return bpf_redirect(cursor->skb->ifindex, 0);
 

@@ -36,7 +36,8 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
  * inside an ICMP error message, thus only the first eight bytes of the original
  * header are parsed.
  */
-static int probe_match_icmp(struct cursor *cursor, __u8 is_request)
+static int probe_match_icmp(struct cursor *cursor, __u8 is_request,
+                            __u32 *const identifier)
 {
     struct icmphdr *icmp;
 
@@ -53,7 +54,8 @@ static int probe_match_icmp(struct cursor *cursor, __u8 is_request)
             return -1;
     }
 
-    return icmp->un.echo.id;
+    *identifier = icmp->un.echo.id;
+    return 0;
 }
 
 /*
@@ -64,7 +66,8 @@ static int probe_match_icmp(struct cursor *cursor, __u8 is_request)
  * inside an ICMP error message, thus only the first eight bytes of the original
  * header are parsed.
  */
-static int probe_match_udp(struct cursor *cursor, __u8 is_request)
+static int probe_match_udp(struct cursor *cursor, __u8 is_request,
+                           __u32 *const identifier)
 {
     struct udphdr *udp;
     if (PARSE(cursor, &udp) < 0)
@@ -80,7 +83,8 @@ static int probe_match_udp(struct cursor *cursor, __u8 is_request)
     } else
         return -1;
 
-    return udp->check;
+    *identifier = udp->check;
+    return 0;
 }
 
 /*
@@ -91,7 +95,8 @@ static int probe_match_udp(struct cursor *cursor, __u8 is_request)
  * inside an ICMP error message, thus only the first eight bytes of the original
  * header are parsed.
  */
-static int probe_match_tcp(struct cursor *cursor, __u8 is_request)
+static int probe_match_tcp(struct cursor *cursor, __u8 is_request,
+                           __u32 *const identifier)
 {
     struct tcphdr *tcp;
 
@@ -101,7 +106,7 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request)
         if (tcp->source != SOURCE_PORT)
             return -1;
 
-        return bpf_htonl(tcp->seq);
+        *identifier = bpf_htonl(tcp->seq);
     } else {
         if (PARSE(cursor, &tcp) < 0)
             return -1;
@@ -110,8 +115,10 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request)
         if (!tcp->rst && !(tcp->syn && tcp->ack))
             return -1;
 
-        return bpf_ntohl(tcp->ack_seq) - 1;
+        *identifier = bpf_ntohl(tcp->ack_seq) - 1;
     }
+
+    return 0;
 }
 
 /*
@@ -126,7 +133,7 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
     union {
         __be32 i32[2];
         __be16 i16[4];
-    } *payload;
+    } * payload;
 
     if (resize_l3hdr(cursor, sizeof(*icmp) + sizeof(*payload), eth, ip) < 0)
         return -1;
@@ -169,7 +176,7 @@ static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
     union {
         __be32 i32[2];
         __be16 i16[4];
-    } *payload;
+    } * payload;
 
     if (resize_l3hdr(cursor, sizeof(*udp) + sizeof(*payload), eth, ip) < 0)
         return -1;
@@ -248,15 +255,16 @@ static probe_error probe_set_tcp(struct cursor *cursor, struct probe *probe,
  * Returns a negative value on no match and a positive value for the possible
  * probe identifier.
  */
-INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request)
+INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request,
+                         __u32 *const identifier)
 {
     switch (proto) {
     case IPPROTO_TCP:
-        return probe_match_tcp(cursor, is_request);
+        return probe_match_tcp(cursor, is_request, identifier);
     case IPPROTO_UDP:
-        return probe_match_udp(cursor, is_request);
+        return probe_match_udp(cursor, is_request, identifier);
     case G_PROTO_ICMP:
-        return probe_match_icmp(cursor, is_request);
+        return probe_match_icmp(cursor, is_request, identifier);
     default:
         return -1;
     }
@@ -268,7 +276,8 @@ INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request)
  * positive value on an invalid probe configuration.
  */
 INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
-                          struct ethhdr **eth, iphdr_t **ip)
+                          struct ethhdr **eth, iphdr_t **ip,
+                          const ipaddr_t *target)
 {
     int ret;
     struct probe *probe = &args->probe;
@@ -306,7 +315,7 @@ INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
     (**ip).hop_limit = args->ttl;
 #endif
     // Swap addresses.
-    swap_addr(*eth, *ip);
+    swap_addr(*eth, *ip, target);
 
     // Packet is ready to be sent.
     return ERR_NONE;

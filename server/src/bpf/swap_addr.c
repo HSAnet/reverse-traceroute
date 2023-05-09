@@ -33,15 +33,15 @@ INTERNAL void swap_addr_ethhdr(struct ethhdr *ethhdr)
     }
 }
 
-INTERNAL void swap_addr_iphdr(iphdr_t *iphdr)
+INTERNAL void swap_addr_iphdr(iphdr_t *iphdr, const ipaddr_t *target)
 {
-    ipaddr_t tmp_ip = iphdr->saddr;
+    const ipaddr_t tmp_ip = (target == NULL) ? iphdr->saddr : *target;
     iphdr->saddr = iphdr->daddr;
     iphdr->daddr = tmp_ip;
 }
 
-INTERNAL void swap_addr(struct ethhdr *eth, iphdr_t *ip)
+INTERNAL void swap_addr(struct ethhdr *eth, iphdr_t *ip, const ipaddr_t *target)
 {
     swap_addr_ethhdr(eth);
-    swap_addr_iphdr(ip);
+    swap_addr_iphdr(ip, target);
 }
