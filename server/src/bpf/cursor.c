@@ -46,20 +46,53 @@ INTERNAL void cursor_clone(const struct cursor *original, struct cursor *clone)
     *clone = *original;
 }
 
-INTERNAL int PARSE_IP(struct cursor *cursor, iphdr_t **hdr)
+INTERNAL int PARSE_IP(struct cursor *cursor, iphdr_t **hdr, __u8 *const proto)
 {
     if (PARSE(cursor, hdr) < 0)
         return -1;
 
 #if defined(TRACEROUTE_V4)
     long new_pos = (long)(*hdr) + (**hdr).ihl * 4;
-    if (new_pos <= cursor_end(cursor)) {
-        cursor->pos = (void *)new_pos;
-        return 0;
+    if (new_pos > cursor_end(cursor))
+        return -1;
+
+    cursor->pos = (void *)new_pos;
+    *proto = (**hdr).protocol;
+    return 0;
+
+#elif defined(TRACEROUTE_V6)
+    struct ipv6_opt_hdr *ext_hdr;
+    __u8 next_hdr = (**hdr).nexthdr;
+
+    for (int i = 0; i < 10; i++) {
+        switch (next_hdr) {
+        case 0:
+        case 43:
+        case 44:
+        case 51:
+        case 50:
+        case 60:
+        case 135:
+        case 139:
+        case 140:
+        case 253:
+        case 254:
+            if (PARSE(cursor, &ext_hdr) < 0)
+                return -1;
+
+            long new_pos = (long)(ext_hdr) + ((ext_hdr->hdrlen + 1) * 8);
+            if (new_pos > cursor_end(cursor))
+                return -1;
+
+            cursor->pos = (void *)new_pos;
+            next_hdr = ext_hdr->nexthdr;
+            continue;
+        default:
+            break;
+        }
     }
 
-    return -1;
-#elif defined(TRACEROUTE_V6)
+    *proto = next_hdr;
     return 0;
 #endif
 }

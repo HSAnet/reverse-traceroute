@@ -32,11 +32,11 @@ INTERNAL __sum16 csum(const void *cursor, __u16 len, __be32 seed)
     }
 
     if (len > 0)
-        sum += *pos;
+        sum += *(__u8 *)pos;
 
     // Fold the recorded carry-outs back into the 16-bit sum.
-    sum = (sum & 0xffff) + (sum >> 16);
-    sum = (sum & 0xffff) + (sum >> 16);
+    while (sum >> 16)
+        sum = (sum & 0xffff) + (sum >> 16);
 
     return (__sum16)~sum;
 }
@@ -45,15 +45,10 @@ INTERNAL __be32 pseudo_header(const iphdr_t *ip, __u16 probe_len, __u8 protocol)
 {
     __be32 pseudo_hdr = bpf_htons(probe_len);
 
-#if defined(TRACEROUTE_V4)
-    pseudo_hdr += (__be16)(ip->saddr) + (__be16)(ip->saddr >> 16);
-    pseudo_hdr += (__be16)(ip->daddr) + (__be16)(ip->daddr >> 16);
-#elif defined(TRACEROUTE_V6)
-    for (int i = 0; i < 8; i++) {
-        pseudo_hdr += ip->daddr.in6_u.u6_addr16[i];
-        pseudo_hdr += ip->saddr.in6_u.u6_addr16[i];
+    for (int counter = 0; counter < (sizeof(ipaddr_t) / 2); counter++) {
+        pseudo_hdr += *((__be16 *)&(ip->saddr) + counter);
+        pseudo_hdr += *((__be16 *)&(ip->daddr) + counter);
     }
-#endif
 
     pseudo_hdr += bpf_htons(protocol);
     return pseudo_hdr;

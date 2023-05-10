@@ -47,6 +47,6 @@ INTERNAL void cursor_clone(const struct cursor *original, struct cursor *clone);
     })
 
 // Parses the IP header including any following options.
-INTERNAL int PARSE_IP(struct cursor *cursor, iphdr_t **hdr);
+INTERNAL int PARSE_IP(struct cursor *cursor, iphdr_t **hdr, __u8 *const proto);
 
 #endif

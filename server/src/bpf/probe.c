@@ -148,12 +148,7 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
     icmp->un.echo.id = probe->identifier;
     icmp->un.echo.sequence = ICMP_PROBE_SEQ;
 
-#if defined(TRACEROUTE_V4)
-    __be32 seed = 0;
-#elif defined(TRACEROUTE_V6)
-    __be32 seed =
-        pseudo_header(*ip, sizeof(*icmp) + sizeof(*payload), G_PROTO_ICMP);
-#endif
+    __be32 seed = G_ICMP_PSEUDOHDR(**ip, sizeof(*icmp) + sizeof(*payload));
 
     payload->i32[0] = bpf_get_prandom_u32();
     payload->i32[1] = bpf_get_prandom_u32();
@@ -308,15 +303,10 @@ INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
     // Swap addresses.
     swap_addr(*eth, *ip, target);
 
-#if defined(TRACEROUTE_V4)
-    (**ip).protocol = args->proto;
-    (**ip).ttl = args->ttl;
-    (**ip).check = 0;
-    (**ip).check = csum(*ip, sizeof(**ip), 0);
-#elif defined(TRACEROUTE_V6)
-    (**ip).nexthdr = args->proto;
-    (**ip).hop_limit = args->ttl;
-#endif
+    G_IP_NEXTHDR(**ip) = args->proto;
+    G_IP_TTL(**ip) = args->ttl;
+
+    G_IP_CSUM_COMPUTE(**ip);
 
     // Packet is ready to be sent.
     return ERR_NONE;

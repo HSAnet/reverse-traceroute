@@ -38,15 +38,10 @@ static void response_init_eth_ip(struct ethhdr *eth, iphdr_t *ip, ipaddr_t from,
     ip->saddr = from;
     ip->daddr = to;
 
-#if defined(TRACEROUTE_V4)
-    ip->protocol = G_PROTO_ICMP;
-    ip->ttl = 64;
-    ip->check = 0;
-    ip->check = csum(ip, sizeof(*ip), 0);
-#elif defined(TRACEROUTE_V6)
-    ip->nexthdr = G_PROTO_ICMP;
-    ip->hop_limit = 64;
-#endif
+    G_IP_NEXTHDR(*ip) = G_PROTO_ICMP;
+    G_IP_TTL(*ip) = 64;
+
+    G_IP_CSUM_COMPUTE(*ip);
 }
 
 static void response_init_icmp(struct session_key *session,
@@ -86,11 +81,8 @@ INTERNAL int response_create_err(struct cursor *cursor,
     response_init_eth_ip(*eth, *ip, source_addr, dest_addr);
     response_init_icmp(session, icmp, tr, NULL, error);
 
-#if defined(TRACEROUTE_V4)
-    __be32 seed = 0;
-#elif defined(TRACEROUTE_V6)
-    __be32 seed = pseudo_header(*ip, payload_len, G_PROTO_ICMP);
-#endif
+    __be32 seed = G_ICMP_PSEUDOHDR(**ip, payload_len);
+
     icmp->checksum = 0;
     icmp->checksum = csum(icmp, payload_len, seed);
 
@@ -140,11 +132,8 @@ INTERNAL int response_create(struct cursor *cursor, struct session_key *session,
     response_init_eth_ip(*eth, *ip, source_addr, dest_addr);
     response_init_icmp(session, icmp, tr, payload, 0);
 
-#if defined(TRACEROUTE_V4)
-    __be32 seed = 0;
-#elif defined(TRACEROUTE_V6)
-    __be32 seed = pseudo_header(*ip, payload_len, G_PROTO_ICMP);
-#endif
+    __be32 seed = G_ICMP_PSEUDOHDR(**ip, payload_len);
+
     icmp->checksum = 0;
     icmp->checksum = csum(icmp, payload_len, seed);
 

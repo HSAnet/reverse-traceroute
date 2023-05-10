@@ -43,3 +43,7 @@ $(BUILD_DIR) $(BPF_BUILD_DIR) $(SKELETON_DIR):
 
 clean::
 	-rm -r build
+
+.PHONY: format
+format:
+	clang-format -i -style=file:.clang_format `find . -type f -name "*.[ch]"`

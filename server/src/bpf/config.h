@@ -21,6 +21,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #define CONFIG_H
 
 #include <linux/types.h>
+#include <stdbool.h>
 
 // The default value for the maximum session entries if not overridden by the
 // loader
@@ -29,7 +30,9 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 // The default value for the session entry timeout if not overridden by the
 // loader
 #define DEFAULT_TIMEOUT_NS 5000000000
-
 extern volatile const __u64 TIMEOUT_NS;
+
+#define DEFAULT_INDIRECT_TRACE_ENABLED false
+extern volatile const bool INDIRECT_TRACE_ENABLED;
 
 #endif

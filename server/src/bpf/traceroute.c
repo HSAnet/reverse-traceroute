@@ -18,6 +18,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "cursor.h"
+#include "config.h"
 #include "logging.h"
 #include "probe.h"
 #include "proto.h"
@@ -30,25 +31,13 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/if_packet.h>
 #include <linux/pkt_cls.h>
 
-/*
- * Parses the reverse traceroute request header.
- * On a valid configuration state is created and a traceroute probe sent back to
- * the originator. Otherwise a response notifying the originator about the
- * invalid configuration is dispatched.
- */
+volatile const bool INDIRECT_TRACE_ENABLED = DEFAULT_INDIRECT_TRACE_ENABLED;
 
-static int handle_request(struct cursor *cursor, struct ethhdr **eth,
-                          iphdr_t **ip, struct icmphdr **icmp)
+static int parse_indirect_multipart(struct cursor *cursor,
+                                    ipaddr_t *const target)
 {
-    int err;
-    union trhdr *tr;
-
     struct icmp_multipart_hdr *multipart_hdr;
     struct icmp_multipart_extension *extension_obj;
-    ipaddr_t target = (**ip).saddr;
-
-    if (PARSE(cursor, &tr) < 0)
-        return TC_ACT_OK;
 
     if (PARSE(cursor, &multipart_hdr) == 0) {
         if (multipart_hdr->version == 2 && PARSE(cursor, &extension_obj) == 0) {
@@ -60,14 +49,39 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
                 if (PARSE(cursor, &ext_addr) == 0) {
 #if defined(TRACEROUTE_V4)
                     // TODO: Check for mapped address format
-                    target = ext_addr->in6_u.u6_addr32[3];
+                    *target = ext_addr->in6_u.u6_addr32[3];
 #elif defined(TRACEROUTE_V6)
-                    target = *ext_addr;
+                    *target = *ext_addr;
+
+                    return 0;
 #endif
                 }
             }
         }
     }
+
+    return -1;
+}
+
+/*
+ * Parses the reverse traceroute request header.
+ * On a valid configuration state is created and a traceroute probe sent back to
+ * the originator. Otherwise a response notifying the originator about the
+ * invalid configuration is dispatched.
+ */
+static int handle_request(struct cursor *cursor, struct ethhdr **eth,
+                          iphdr_t **ip, struct icmphdr **icmp)
+{
+    int err;
+    union trhdr *tr;
+    ipaddr_t target = (**ip).saddr;
+
+    if (PARSE(cursor, &tr) < 0)
+        return TC_ACT_OK;
+
+    if (INDIRECT_TRACE_ENABLED)
+        if (parse_indirect_multipart(cursor, &target) < 0)
+            return TC_ACT_SHOT;
 
     struct session_key session = SESSION_NEW_KEY(target, (*icmp)->un.echo.id);
     struct session_state state =
@@ -97,6 +111,8 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
 static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
                                iphdr_t **ip)
 {
+    __u8 dummy;
+
     if (bpf_clone_redirect(cursor->skb, cursor->skb->ifindex, BPF_F_INGRESS) <
         0)
         return -1;
@@ -104,7 +120,7 @@ static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
     cursor_reset(cursor);
     if (PARSE(cursor, eth) < 0)
         return -1;
-    if (PARSE_IP(cursor, ip) < 0)
+    if (PARSE_IP(cursor, ip, &dummy) < 0)
         return -1;
 
     return 0;
@@ -121,10 +137,11 @@ static int handle(struct cursor *cursor)
 {
     struct ethhdr *eth;
     iphdr_t *ip;
+    __u8 proto;
 
     if (PARSE(cursor, &eth) < 0)
         goto pass;
-    if (PARSE_IP(cursor, &ip) < 0)
+    if (PARSE_IP(cursor, &ip, &proto) < 0)
         goto pass;
 
     // Initialize variables to default values.
@@ -132,7 +149,6 @@ static int handle(struct cursor *cursor)
     __u8 is_request = 0;
     ipaddr_t target = ip->saddr;
 
-    __u8 proto = IP_NEXTHDR(*ip);
     if (proto == G_PROTO_ICMP) {
         struct icmphdr *icmp;
 
@@ -149,10 +165,9 @@ static int handle(struct cursor *cursor)
         } else if ((icmp->type == G_ICMP_TIME_EXCEEDED && icmp->code == 0) ||
                    icmp->type == G_ICMP_DEST_UNREACH) {
             iphdr_t *inner_ip;
-            if (PARSE_IP(cursor, &inner_ip) < 0)
+            if (PARSE_IP(cursor, &inner_ip, &proto) < 0)
                 goto pass;
 
-            proto = IP_NEXTHDR(*inner_ip);
             target = inner_ip->daddr;
             is_request = 1;
         } else {

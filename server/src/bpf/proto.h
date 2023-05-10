@@ -46,7 +46,7 @@ struct icmp_multipart_hdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
     __u16 reserved : 12, version : 4;
 #elif defined(__BIG_ENDIAN_BITFIELD)
-    __u16 reserved : 12, version : 4;
+    __u16 version : 4, reserved : 12;
 #else
 #error "Expected defines in <asm/byteorder.h>."
 #endif
