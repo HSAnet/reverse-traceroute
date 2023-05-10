@@ -106,8 +106,7 @@ INTERNAL int response_create(struct cursor *cursor, struct session_key *session,
     struct trhdr_payload *payload;
     __u64 timespan_ns;
 
-    // ipaddr_t dest_addr = state->origin;
-    ipaddr_t dest_addr = session->addr;
+    ipaddr_t dest_addr = state->origin;
     ipaddr_t source_addr = (**ip).daddr;
     ipaddr_t from_addr = (**ip).saddr;
 

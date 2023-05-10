@@ -305,6 +305,9 @@ INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
     if (ret != ERR_NONE)
         return ret;
 
+    // Swap addresses.
+    swap_addr(*eth, *ip, target);
+
 #if defined(TRACEROUTE_V4)
     (**ip).protocol = args->proto;
     (**ip).ttl = args->ttl;
@@ -314,8 +317,6 @@ INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
     (**ip).nexthdr = args->proto;
     (**ip).hop_limit = args->ttl;
 #endif
-    // Swap addresses.
-    swap_addr(*eth, *ip, target);
 
     // Packet is ready to be sent.
     return ERR_NONE;
