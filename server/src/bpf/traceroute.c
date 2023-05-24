@@ -47,7 +47,7 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     struct session_state state = {.timestamp_ns = bpf_ktime_get_ns()};
 
     if (PARSE(cursor, &tr) < 0)
-        return TC_ACT_OK;
+        return TC_ACT_SHOT;
 
     session.addr = (*ip)->saddr;
     session.identifier = (*icmp)->un.echo.id;
