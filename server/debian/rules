@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+export DH_VERBOSE = 1
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+
+export DEB_CFLAGS_MAINT_STRIP  = -g
+export DEB_CFLAGS_MAINT_APPEND = -gdwarf-4
+
+%:
+	dh $@ --sourcedirectory=src --with-systemd
+
+override_dh_installsystemd:
+	dh_installsystemd --name="augsburg-traceroute-server-v4@" --no-enable --no-start
+	dh_installsystemd --name="augsburg-traceroute-server-v6@" --no-enable --no-start
