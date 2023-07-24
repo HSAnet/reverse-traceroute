@@ -38,6 +38,7 @@ struct session_state {
 #endif
 };
 
+
 #define SESSION_NEW_KEY(x, y)                                                  \
     {                                                                          \
         .padding = 0, .addr = (x), .identifier = (y)                           \

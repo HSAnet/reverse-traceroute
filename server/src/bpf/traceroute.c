@@ -33,35 +33,15 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 volatile const bool INDIRECT_TRACE_ENABLED = DEFAULT_INDIRECT_TRACE_ENABLED;
 
-static int parse_indirect_multipart(struct cursor *cursor,
-                                    ipaddr_t *const target)
+static int parse_mp_hdr(struct cursor *cursor)
 {
     struct icmp_multipart_hdr *multipart_hdr;
-    struct icmp_multipart_extension *extension_obj;
 
-    if (PARSE(cursor, &multipart_hdr) == 0) {
-        if (multipart_hdr->version == 2 && PARSE(cursor, &extension_obj) == 0) {
-            __u16 ext_length = bpf_ntohs(extension_obj->length);
-
-            if (ext_length ==
-                sizeof(struct in6_addr) + sizeof(*extension_obj)) {
-                struct in6_addr *ext_addr;
-                if (PARSE(cursor, &ext_addr) == 0) {
-#if defined(TRACEROUTE_V4)
-                    // TODO: Check for mapped address format
-                    *target = ext_addr->in6_u.u6_addr32[3];
-#elif defined(TRACEROUTE_V6)
-                    *target = *ext_addr;
-
-                    return 0;
-#endif
-                }
-            }
-        }
-    }
-
+    if (PARSE(cursor, &multipart_hdr) == 0 && multipart_hdr->version == 2)
+        return 0;
     return -1;
 }
+
 
 /*
  * Parses the reverse traceroute request header.
@@ -73,15 +53,12 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
                           iphdr_t **ip, struct icmphdr **icmp)
 {
     int err;
+    __be16 err_value = 0;
     union trhdr *tr;
     ipaddr_t target = (**ip).saddr;
 
     if (PARSE(cursor, &tr) < 0)
         return TC_ACT_OK;
-
-    if (INDIRECT_TRACE_ENABLED)
-        if (parse_indirect_multipart(cursor, &target) < 0)
-            return TC_ACT_SHOT;
 
     struct session_key session = SESSION_NEW_KEY(target, (*icmp)->un.echo.id);
     struct session_state state =
@@ -100,11 +77,18 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     if (err == ERR_NONE) {
         if (session_add(&session, &state) < 0)
             return TC_ACT_SHOT;
-    } else {
-        if (response_create_err(cursor, &session, err, eth, ip) < 0)
+    }
+    else {
+        struct response_args args = {
+            .key = &session,
+            .state = &state,
+            .error = err,
+            .value = 0,
+        };
+        if (response_create(cursor, &args, eth, ip) < 0)
             return TC_ACT_SHOT;
     }
-
+ 
     return bpf_redirect(cursor->skb->ifindex, 0);
 }
 
@@ -200,12 +184,18 @@ static int handle(struct cursor *cursor)
         if (skb_copy_to_ingress(cursor, &eth, &ip) < 0)
             goto drop;
 
+    struct response_args args = {
+        .key = &session,
+        .state = state,
+        .error = ERR_NONE,
+        .value = 0,
+    };
     // Remove the session from our table and respond to the original requestor.
     // Note: It is safe to access map elements after a delete call as execution
     // takes places under an RCU read lock.
     // Data associated with the deleted map entry will be reclaimed after
     // program execution ends.
-    if (response_create(cursor, &session, state, &eth, &ip) < 0)
+    if (response_create(cursor, &args, &eth, &ip) < 0)
         goto drop;
     return bpf_redirect(cursor->skb->ifindex, 0);
 

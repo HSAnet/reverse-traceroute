@@ -26,11 +26,15 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include "ip_generic.h"
 #include <linux/if_ether.h>
 
-INTERNAL int response_create_err(struct cursor *cursor,
-                                 struct session_key *session, probe_error error,
-                                 struct ethhdr **eth, iphdr_t **ip);
-INTERNAL int response_create(struct cursor *cursor, struct session_key *session,
-                             struct session_state *state, struct ethhdr **eth,
-                             iphdr_t **ip);
+struct response_args {
+    struct session_key *key;
+    struct session_state *state;
+    probe_error error;
+    __be16 value;
+};
+
+INTERNAL int response_create(struct cursor *cursor,
+                             struct response_args *args,
+                             struct ethhdr **eth, iphdr_t **ip);
 
 #endif
