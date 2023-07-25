@@ -1,5 +1,5 @@
 Source: augsburg-traceroute-server
-Section: unknown
+Section: net
 Priority: optional
 Maintainer: Valentin Heinrich <v.heinrich99@gmail.com>
 Build-Depends: clang-14,
