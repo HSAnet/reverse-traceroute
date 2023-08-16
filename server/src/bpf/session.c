@@ -25,11 +25,6 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <bpf/bpf_helpers.h>
 #include <asm-generic/errno-base.h>
 
-// This variable may be overwritten by the program loader.
-// We declare it as volatile so the compiler won´t optimize it away,
-// e.g. inline the constant value into instructions.
-volatile const __u64 TIMEOUT_NS = DEFAULT_TIMEOUT_NS;
-
 // The internally used state consists of the usual state and a timer.
 // The timer should not be exposed as part of the regular state.
 struct __session_state {

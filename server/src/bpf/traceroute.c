@@ -28,14 +28,14 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 #include <linux/bpf.h>
+#include <linux/icmp.h>
 #include <linux/if_packet.h>
 #include <linux/pkt_cls.h>
 
-volatile const bool INDIRECT_TRACE_ENABLED = DEFAULT_INDIRECT_TRACE_ENABLED;
 
 static int parse_mp_hdr(struct cursor *cursor)
 {
-    struct icmp_multipart_hdr *multipart_hdr;
+    struct icmp_ext_hdr *multipart_hdr;
 
     if (PARSE(cursor, &multipart_hdr) == 0 && multipart_hdr->version == 2)
         return 0;
@@ -55,7 +55,7 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     int err;
     union trhdr *tr;
 
-    __u16 session_id = (*icmp)->un.echo.id;
+    __be16 session_id = (*icmp)->un.echo.id;
     ipaddr_t target = (**ip).saddr;
 
     if (PARSE(cursor, &tr) < 0)
@@ -68,11 +68,11 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
         if (parse_mp_hdr(cursor) < 0)
             return TC_ACT_SHOT;
         
-        struct icmp_multipart_extension *obj;
+        struct icmp_extobj_hdr *obj;
         if (PARSE(cursor, &obj) < 0)
             return TC_ACT_SHOT;
 
-        if (INDIRECT_TRACE_ENABLED && (obj->length) == 16 && obj->class_num == 5 && obj->class_type == 0) {
+        if (INDIRECT_TRACE_ENABLED && bpf_ntohs(obj->length) == 16 && obj->class_num == 5 && obj->class_type == 0) {
             struct in6_addr *addr;
             if (PARSE(cursor, &addr) < 0)
                 return TC_ACT_SHOT;
@@ -245,7 +245,7 @@ SEC("tc")
 int prog(struct __sk_buff *skb)
 {
     if (skb->pkt_type != PACKET_HOST)
-        return 0;
+        return TC_ACT_UNSPEC;
 
     struct cursor cursor;
     cursor_init(&cursor, skb);

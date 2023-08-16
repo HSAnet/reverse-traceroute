@@ -47,8 +47,7 @@ typedef enum {
     ERR_TTL = 0x01,
     ERR_PROTO = 0x02,
     ERR_FLOW = 0x03,
-    ERR_MULTIPART_DISABLED = 0x04,
-    ERR_MULTIPART_NOT_SUPPORTED = 0x05,
+    ERR_MULTIPART_NOT_SUPPORTED = 0x04,
 } probe_error;
 
 INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,

@@ -27,7 +27,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/resource.h>
-#include <unistd.h>
+#include <getopt.h>
 #include <net/if.h>
 #include <fcntl.h>
 
@@ -40,28 +40,36 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #define ADDRSTRLEN    INET6_ADDRSTRLEN
 #define ADDR_FAMILY   AF_INET6
 #endif
-
 #define FILTER_PRIO 1
-
 struct args {
-    int ifindex;      // Always specified by the user
-    __u64 TIMEOUT_NS; // Optional, 0 if not specified
-    __u32 MAX_ELEM;   // Optional, 0 if not specified
+    int ifindex;            // Always specified by the user
+    int indirect_enabled;   // Optional, 0 if not specified
+    __u64 TIMEOUT_NS;       // Optional, 0 if not specified
+    __u32 MAX_ELEM;         // Optional, 0 if not specified
 };
 
 const char *fmt_help_message =
-    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] ifname\n"
+    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--indirect] ifname\n"
     "\t-t: The time after which a session expires, in nanoseconds.\n"
-    "\t-n: The maximum number of sessions the server can handle.\n";
+    "\t-n: The maximum number of sessions the server can handle.\n"
+    "\t--indirect: Allow the client to specify the trace target.\n";
 
 static int parse_args(int argc, char **argv, struct args *args)
 {
     memset(args, 0, sizeof(*args));
 
+    struct option long_opts[] = {
+        {"indirect", no_argument, &args->indirect_enabled, 1},
+        {0, 0, 0, 0}
+    };
+
     char *endptr;
-    int option;
-    while ((option = getopt(argc, argv, "t:n:h")) != -1) {
-        switch (option) {
+    int option_id, option_index = 0;
+    while ((option_id = getopt_long(argc, argv, "t:n:h", long_opts, &option_index)) != -1) {
+        switch (option_id) {
+        // Long option encountered
+        case 0:
+            continue;
         case 't':
             args->TIMEOUT_NS = strtoull(optarg, &endptr, 0);
             if (*endptr != '\0') {
@@ -116,6 +124,9 @@ static struct traceroute *traceroute_init(const struct args *args)
         fprintf(stderr, "Failed to open the eBPF program.\n");
         goto err;
     }
+
+    if (args->indirect_enabled)
+        traceroute->rodata->INDIRECT_TRACE_ENABLED = 1;
 
     if (args->TIMEOUT_NS)
         traceroute->rodata->TIMEOUT_NS = args->TIMEOUT_NS;
@@ -218,8 +229,10 @@ int main(int argc, char **argv)
 
     fprintf(stderr, "\n\nSession timeout in nanoseconds: %llu\n",
             tr->rodata->TIMEOUT_NS);
-    fprintf(stderr, "Maximum session entries: %u\n\n\n",
+    fprintf(stderr, "Maximum session entries: %u\n",
             bpf_map__max_entries(tr->maps.map_sessions));
+    fprintf(stderr, "Indirect trace enabled: %s\n\n\n",
+            tr->rodata->INDIRECT_TRACE_ENABLED ? "yes" : "no");
 
     log_buf = ring_buffer__new(bpf_map__fd(tr->maps.log_buf), log_message, NULL,
                                NULL);

@@ -42,22 +42,4 @@ struct trhdr_payload {
     __u64 timespan_ns;
 } __attribute__((packed));
 
-struct icmp_multipart_hdr {
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-    __u16 reserved : 12, version : 4;
-#elif defined(__BIG_ENDIAN_BITFIELD)
-    __u16 version : 4, reserved : 12;
-#else
-#error "Expected defines in <asm/byteorder.h>."
-#endif
-
-    __be16 checksum;
-} __attribute__((packed));
-
-struct icmp_multipart_extension {
-    __be16 length;
-    __u8 class_num;
-    __u8 class_type;
-} __attribute__((packed));
-
 #endif

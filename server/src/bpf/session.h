@@ -26,7 +26,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 struct session_key {
     ipaddr_t target;
-    __u16 identifier;
+    __be16 identifier;
     __u16 padding;
 };
 
