@@ -52,7 +52,8 @@ static int parse_mp_hdr(struct cursor *cursor)
 static int handle_request(struct cursor *cursor, struct ethhdr **eth,
                           iphdr_t **ip, struct icmphdr **icmp)
 {
-    int err;
+    // Set on error condition
+    int err, err_value = 0;
     union trhdr *tr;
 
     __be16 session_id = (*icmp)->un.echo.id;
@@ -61,8 +62,6 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     if (PARSE(cursor, &tr) < 0)
         return TC_ACT_SHOT;
 
-    struct session_state state =
-        SESSION_NEW_STATE(bpf_ktime_get_ns(), (**ip).saddr);
 
     if ((long)cursor->pos < cursor_end(cursor)) {
         if (parse_mp_hdr(cursor) < 0)
@@ -83,44 +82,47 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
             target = *addr;
 #endif
         } else {
-            struct response_args args = {
-                .session_id = session_id,
-                .state = &state,
-                .error = ERR_MULTIPART_NOT_SUPPORTED,
-                .value = bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type),
-            };
-            if (response_create(cursor, &args, eth, ip) < 0)
-                return TC_ACT_SHOT;
-            goto redirect;
+            err = ERR_MULTIPART_NOT_SUPPORTED;
+            err_value = bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type);
+            goto error;
         }
     }
 
-    struct probe_args probe_args = {
+    struct session_state state =
+        SESSION_NEW_STATE(bpf_ktime_get_ns(), (**ip).saddr);
+
+    struct probe_args args = {
         .ttl = tr->request.ttl,
         .proto = tr->request.proto,
         .probe.flow = tr->request.flow,
         .probe.identifier = session_id,
     };
 
-    if ((err = probe_create(cursor, &probe_args, eth, ip, &target)) < 0)
+    if ((err = probe_create(cursor, &args, eth, ip, &target)) < 0)
         return TC_ACT_SHOT;
+
 
     if (err == ERR_NONE) {
         struct session_key session = SESSION_NEW_KEY(target, session_id);
         if (session_add(&session, &state) < 0)
             return TC_ACT_SHOT;
+        goto redirect;
     }
-    else {
-        struct response_args args = {
-            .session_id = session_id,
-            .state = &state,
-            .error = err,
-            .value = 0,
-        };
-        if (response_create(cursor, &args, eth, ip) < 0)
-            return TC_ACT_SHOT;
-    }
-redirect: 
+
+error:;
+    // TODO: response_create should not rely on state, as tstamp is not always needed
+    // -> Refactor in error and not err with common args: session_id, origin_addr
+    //  err-args: err, err_value
+    //  regular: timestamp
+    struct response_args resp_args = {
+        .session_id = session_id,
+        .state = &state,
+        .error = err,
+        .value = err_value,
+    };
+    if (response_create(cursor, &resp_args, eth, ip) < 0)
+        return TC_ACT_SHOT;
+redirect:
     return bpf_redirect(cursor->skb->ifindex, 0);
 }
 
