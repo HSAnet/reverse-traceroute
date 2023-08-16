@@ -266,7 +266,7 @@ def main():
             exit()
         try:
             probe_gen.parse_probe_response(req, resp)
-        except ReverseProbeGen.InvalidTtlException:
+        except ReverseProbeGen.Error:
             pass
         except Exception as e:
             logging.error(e)
