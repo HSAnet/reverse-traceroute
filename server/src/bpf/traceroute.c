@@ -59,7 +59,7 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
     ipaddr_t target = (**ip).saddr;
 
     if (PARSE(cursor, &tr) < 0)
-        return TC_ACT_OK;
+        return TC_ACT_SHOT;
 
     struct session_state state =
         SESSION_NEW_STATE(bpf_ktime_get_ns(), (**ip).saddr);
@@ -89,7 +89,9 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
                 .error = ERR_MULTIPART_NOT_SUPPORTED,
                 .value = bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type),
             };
-            return response_create(cursor, &args, eth, ip);
+            if (response_create(cursor, &args, eth, ip) < 0)
+                return TC_ACT_SHOT;
+            goto redirect;
         }
     }
 
@@ -118,7 +120,7 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
         if (response_create(cursor, &args, eth, ip) < 0)
             return TC_ACT_SHOT;
     }
- 
+redirect: 
     return bpf_redirect(cursor->skb->ifindex, 0);
 }
 
