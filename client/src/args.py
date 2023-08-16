@@ -182,6 +182,11 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "target", type=str, help="The traceroute target to traceroute to/from."
     )
+    parser.add_argument(
+        "--forward-to",
+        type=str,
+        help="Only available in reverse-only direction. Asks the target server to trace towards the host specified by this argument.",
+    )
 
     args = parser.parse_args()
     return args

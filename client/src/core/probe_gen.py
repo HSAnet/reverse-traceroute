@@ -127,19 +127,25 @@ class ReverseProbeGen(AbstractProbeGen):
         def __str__(self):
             return "The target does not support the specified protocol. Try setting it to 0 to let the target choose a suitable value."
 
+    class MultipartNotSupportedException(Error):
+        def __str__(self):
+            return "The target does not support indirect forwarding."
+
     STATUS_TO_EXCEPTION = {
         1: InvalidTtlException,
         2: InvalidFlowException,
         3: InvalidProtocolException,
+        4: MultipartNotSupportedException,
     }
 
-    def __init__(self, target: str, protocol: str):
+    def __init__(self, target: str, protocol: str, forward_to: [None|str]):
         super().__init__(target, protocol)
         # Reuse identifiers which were answered by the server.
         # This reduces the number of entries to be maintained by a client-sided NAPT middlebox.
         # By using the last reclaimed identifier first (LIFO), we maximize the likelihood of
         # hitting an active NAPT entry, which eliminates the overhead to create a new one.
         self._reclaimed_identifiers = []
+        self._forward_to = forward_to
 
     def create_probe(self, ttl: int, flow: int) -> Packet:
         protocol = {
@@ -154,6 +160,18 @@ class ReverseProbeGen(AbstractProbeGen):
             else next(self._probe_id)
         )
         header = struct.pack("!BBH", ttl, protocol, flow)
+
+        if self._forward_to:
+            mp_header = struct.pack("!HH", 1 << 13, 0)
+            mp_header += struct.pack("!HBB", 16, 5, 0)
+            if self.is_ipv4:
+                mp_header += IPv6Address(f"::ffff:{self._forward_to}").packed
+            else:
+                mp_header += IPv6Address(self._forward_to).packed
+            mp_header = bytearray(mp_header)
+            struct.pack_into("!H", mp_header, 2, checksum(mp_header))
+            header += mp_header
+
         if self.is_ipv4:
             return (
                 IP(dst=self.target) / ICMP(type=8, code=1, id=probe_id, seq=0) / header

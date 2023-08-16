@@ -199,7 +199,7 @@ def try_getaddrinfo(target: str, family: int) -> tuple[bool, tuple]:
 
 def try_find_target(target: str, is_v4_v6: tuple[bool, bool]) -> tuple[bool, str]:
     try:
-        return str(ip_address(args.target))
+        return str(ip_address(target))
     except:
         af_families = [socket.AF_INET, socket.AF_INET6]
         selectors = list(is_v4_v6) if any(is_v4_v6) else [True, True]
@@ -231,6 +231,7 @@ def main():
     else:
         log.info(f"Determined traceroute target: {target}")
 
+
     engine = create_probing_engine(args)
     traces = {}
 
@@ -239,7 +240,19 @@ def main():
         root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
         traces["forward"] = root
     if args.direction in ("two-way", "reverse"):
-        probe_gen = ReverseProbeGen(target, args.protocol)
+        if args.direction == "reverse":
+            if args.forward_to:
+                af_selector = (isinstance(ip_address(target), IPv4Address),isinstance(ip_address(target), IPv6Address))
+                valid, forward_to = try_find_target(args.forward_to, af_selector)
+                if not valid:
+                    log.error(f"Failed to resolve '{args.forward_to}'")
+                    exit()
+                else:
+                    log.info(f"Determined indirect target: {forward_to}")
+            else:
+                forward_to = None
+
+        probe_gen = ReverseProbeGen(target, args.protocol, forward_to)
 
         # By requesting a probe with a TTL of 0 an error condition is created.
         # A reverse traceroute server will reply with a status code 1,
