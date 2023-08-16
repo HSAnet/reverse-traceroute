@@ -27,7 +27,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/if_ether.h>
 
 struct response_args {
-    struct session_key *key;
+    __u16 session_id;
     struct session_state *state;
     probe_error error;
     __be16 value;

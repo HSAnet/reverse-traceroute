@@ -44,13 +44,13 @@ static void response_init_eth_ip(struct ethhdr *eth, iphdr_t *ip, ipaddr_t from,
     G_IP_CSUM_COMPUTE(*ip);
 }
 
-static void response_init_icmp(struct session_key *session,
+static void response_init_icmp(__u16 session_id,
                                struct icmphdr *icmp, union trhdr *tr,
                                probe_error error, __be16 value)
 {
     icmp->type = G_ICMP_ECHO_REPLY;
     icmp->code = 1;
-    icmp->un.echo.id = session->identifier;
+    icmp->un.echo.id = session_id;
     icmp->un.echo.sequence = 0;
 
     tr->response.state = error;
@@ -67,7 +67,6 @@ INTERNAL int response_create(struct cursor *cursor,
     struct trhdr_payload *payload;
     __u64 timespan_ns;
 
-    struct session_key *key = args->key;
     struct session_state *state = args->state;
     probe_error error = args->error;
     __be16 value = args->value;
@@ -106,7 +105,7 @@ INTERNAL int response_create(struct cursor *cursor,
         payload->timespan_ns = bpf_htonl(timespan_ns);
 
         response_init_eth_ip(*eth, *ip, source_addr, dest_addr);
-        response_init_icmp(key, icmp, tr, error, value);
+        response_init_icmp(args->session_id, icmp, tr, error, value);
 
         __be32 seed = G_ICMP_PSEUDOHDR(**ip, payload_len);
 
@@ -124,7 +123,7 @@ INTERNAL int response_create(struct cursor *cursor,
             return -1;
 
         response_init_eth_ip(*eth, *ip, source_addr, dest_addr);
-        response_init_icmp(key, icmp, tr, error, value);
+        response_init_icmp(args->session_id, icmp, tr, error, value);
 
         __be32 seed = G_ICMP_PSEUDOHDR(**ip, payload_len);
 

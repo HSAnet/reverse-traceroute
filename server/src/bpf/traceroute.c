@@ -53,34 +53,64 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
                           iphdr_t **ip, struct icmphdr **icmp)
 {
     int err;
-    __be16 err_value = 0;
     union trhdr *tr;
+
+    __u16 session_id = (*icmp)->un.echo.id;
     ipaddr_t target = (**ip).saddr;
 
     if (PARSE(cursor, &tr) < 0)
         return TC_ACT_OK;
 
-    struct session_key session = SESSION_NEW_KEY(target, (*icmp)->un.echo.id);
     struct session_state state =
         SESSION_NEW_STATE(bpf_ktime_get_ns(), (**ip).saddr);
+
+    if ((long)cursor->pos < cursor_end(cursor)) {
+        if (parse_mp_hdr(cursor) < 0)
+            return TC_ACT_SHOT;
+        
+        struct icmp_multipart_extension *obj;
+        if (PARSE(cursor, &obj) < 0)
+            return TC_ACT_SHOT;
+
+        if (bpf_ntohs(obj->length) == 16 && obj->class_num == 5 && obj->class_type == 0) {
+            struct in6_addr *addr;
+            if (PARSE(cursor, &addr) < 0)
+                return TC_ACT_SHOT;
+
+#if defined(TRACEROUTE_V4)
+            target = addr->in6_u.u6_addr32[3];
+#elif defined(TRACEROUTE_V6)
+            target = *addr;
+#endif
+        } else {
+            struct response_args args = {
+                .session_id = session_id,
+                .state = &state,
+                .error = ERR_MULTIPART_NOT_SUPPORTED,
+                .value = bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type),
+            };
+            return response_create(cursor, &args, eth, ip);
+        }
+    }
 
     struct probe_args probe_args = {
         .ttl = tr->request.ttl,
         .proto = tr->request.proto,
         .probe.flow = tr->request.flow,
-        .probe.identifier = (*icmp)->un.echo.id,
+        .probe.identifier = session_id,
     };
 
     if ((err = probe_create(cursor, &probe_args, eth, ip, &target)) < 0)
         return TC_ACT_SHOT;
 
     if (err == ERR_NONE) {
+        struct session_key session = SESSION_NEW_KEY(target, session_id);
         if (session_add(&session, &state) < 0)
             return TC_ACT_SHOT;
     }
     else {
         struct response_args args = {
-            .key = &session,
+            .session_id = session_id,
             .state = &state,
             .error = err,
             .value = 0,
@@ -185,7 +215,7 @@ static int handle(struct cursor *cursor)
             goto drop;
 
     struct response_args args = {
-        .key = &session,
+        .session_id = session.identifier,
         .state = state,
         .error = ERR_NONE,
         .value = 0,

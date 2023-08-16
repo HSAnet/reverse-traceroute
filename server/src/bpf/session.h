@@ -25,7 +25,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/types.h>
 
 struct session_key {
-    ipaddr_t addr;
+    ipaddr_t target;
     __u16 identifier;
     __u16 padding;
 };
@@ -41,7 +41,7 @@ struct session_state {
 
 #define SESSION_NEW_KEY(x, y)                                                  \
     {                                                                          \
-        .padding = 0, .addr = (x), .identifier = (y)                           \
+        .padding = 0, .target = (x), .identifier = (y)                           \
     }
 
 #if defined(TRACEROUTE_V4)
