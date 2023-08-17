@@ -263,7 +263,7 @@ tc_action prog(struct __sk_buff *skb)
     if (bpf_ntohs(skb->protocol) == G_ETH_P_IP)
         return handle(&cursor);
 
-    return TC_ACT_UNSPEC;
+    return TC_ACT_OK;
 }
 
 char __license[] SEC("license") = "GPL";
