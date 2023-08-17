@@ -67,10 +67,7 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
     if (PARSE(cursor, &tr) < 0)
         return TC_ACT_SHOT;
 
-    if ((long)cursor->pos < cursor_end(cursor)) {
-        if (parse_mp_hdr(cursor) < 0)
-            return TC_ACT_SHOT;
-
+    if (parse_mp_hdr(cursor) == 0) {
         struct icmp_extobj_hdr *obj;
         if (PARSE(cursor, &obj) < 0)
             return TC_ACT_SHOT;
