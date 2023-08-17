@@ -197,19 +197,21 @@ def try_getaddrinfo(target: str, family: int) -> tuple[bool, tuple]:
         return False, None
 
 
-def try_find_target(target: str, is_v4_v6: tuple[bool, bool]) -> tuple[bool, str]:
+def try_resolve_host(host: str, is_v4_v6: tuple[bool, bool]) -> tuple[bool, str]:
     try:
-        return str(ip_address(target))
+        return str(ip_address(host))
     except:
         af_families = [socket.AF_INET, socket.AF_INET6]
         selectors = list(is_v4_v6) if any(is_v4_v6) else [True, True]
 
         for af in compress(af_families, selectors):
-            valid, result = try_getaddrinfo(target, af)
+            valid, result = try_getaddrinfo(host, af)
             if valid:
-                *_, sockaddr = result
-                return True, sockaddr[0]
+                *_, (address, *_) = result
+                log.info(f"Resolved '{host}' to '{address}'")
+                return True, address
 
+        log.error(f"Failed to resolve '{host}'")
         return False, None
 
 
@@ -224,35 +226,32 @@ def main():
         }[args.log_level]
     )
 
-    valid, target = try_find_target(args.target, (args.ipv4, args.ipv6))
+    valid, target_addr = try_resolve_host(args.target, (args.ipv4, args.ipv6))
     if not valid:
-        log.error(f"Failed to resolve '{args.target}'")
         exit()
-    else:
-        log.info(f"Determined traceroute target: {target}")
-
 
     engine = create_probing_engine(args)
     traces = {}
 
+    if args.forward_to and args.direction != "reverse":
+        log.warn("Ignoring the '--forward-to' flag as its usage is limited to reverse-only traces.")
+
     if args.direction in ("two-way", "forward"):
-        probe_gen = ClassicProbeGen(target, args.protocol)
-        root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
+        probe_gen = ClassicProbeGen(target_addr, args.protocol)
+        root = discover(engine, probe_gen, target_addr, args.min_ttl, args.max_ttl)
         traces["forward"] = root
     if args.direction in ("two-way", "reverse"):
         if args.direction == "reverse":
             if args.forward_to:
-                af_selector = (isinstance(ip_address(target), IPv4Address),isinstance(ip_address(target), IPv6Address))
-                valid, forward_to = try_find_target(args.forward_to, af_selector)
+                is_ipv4 = isinstance(ip_address(target_addr), IPv4Address)
+                af_selector = (is_ipv4, not is_ipv4)
+                valid, forward_to = try_resolve_host(args.forward_to, af_selector)
                 if not valid:
-                    log.error(f"Failed to resolve '{args.forward_to}'")
                     exit()
-                else:
-                    log.info(f"Determined indirect target: {forward_to}")
             else:
                 forward_to = None
 
-        probe_gen = ReverseProbeGen(target, args.protocol, forward_to)
+        probe_gen = ReverseProbeGen(target_addr, args.protocol, forward_to)
 
         # By requesting a probe with a TTL of 0 an error condition is created.
         # A reverse traceroute server will reply with a status code 1,
@@ -272,7 +271,7 @@ def main():
             logging.error(e)
             exit()
 
-        root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
+        root = discover(engine, probe_gen, target_addr, args.min_ttl, args.max_ttl)
         traces["reverse"] = root
 
     # Resolve hostnames
@@ -283,7 +282,7 @@ def main():
 
     # Resolve aliases
     if args.resolve_aliases:
-        if args.direction == "two-way" and isinstance(ip_address(target), IPv4Address):
+        if args.direction == "two-way" and isinstance(ip_address(target_addr), IPv4Address):
             alias_buckets = apar(traces["forward"], traces["reverse"])
             with open(f"{args.output}" + ".aliases", "w") as f:
                 f.write(
