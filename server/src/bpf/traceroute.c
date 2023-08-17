@@ -75,7 +75,7 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
         if (PARSE(cursor, &obj) < 0)
             return TC_ACT_SHOT;
 
-        if (INDIRECT_TRACE_ENABLED && bpf_ntohs(obj->length) == 16 &&
+        if (CONFIG_INDIRECT_TRACE_ENABLED && bpf_ntohs(obj->length) == 16 &&
             obj->class_num == 5 && obj->class_type == 0) {
             struct in6_addr *addr;
             if (PARSE(cursor, &addr) < 0)

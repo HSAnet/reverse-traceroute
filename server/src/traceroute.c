@@ -43,23 +43,35 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #define FILTER_PRIO 1
 struct args {
     int ifindex;          // Always specified by the user
-    int indirect_enabled; // Optional, 0 if not specified
-    __u64 TIMEOUT_NS;     // Optional, 0 if not specified
-    __u32 MAX_ELEM;       // Optional, 0 if not specified
+
+    int indirect_enabled;
+    int indirect_disabled;
+
+    int tcp_syn_enabled; // Optional, 0 if not specified
+    int tcp_syn_disabled; // Optional, 0 if not specified
+
+    __u64 timeout_ns;     // Optional, 0 if not specified
+    __u32 max_elem;       // Optional, 0 if not specified
 };
 
 const char *fmt_help_message =
-    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--indirect] ifname\n"
+    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--[no-]indirect] [--[no-]tcp-syn-probes] ifname\n"
     "\t-t: The time after which a session expires, in nanoseconds.\n"
     "\t-n: The maximum number of sessions the server can handle.\n"
-    "\t--indirect: Allow the client to specify the trace target.\n";
+    "\t--[no-]indirect: Whether or not the client is allowed to choose the trace target.\n"
+    "\t--[no-]tcp-syn-probes: Whether or not TCP probes are sent with the SYN flag set.\n";
 
 static int parse_args(int argc, char **argv, struct args *args)
 {
     memset(args, 0, sizeof(*args));
 
     struct option long_opts[] = {
-        {"indirect", no_argument, &args->indirect_enabled, 1}, {0, 0, 0, 0}};
+        {"indirect", no_argument, &args->indirect_enabled, 1}, 
+        {"no-indirect", no_argument, &args->indirect_disabled, 1}, 
+        {"tcp-syn-probes", no_argument, &args->tcp_syn_enabled, 1}, 
+        {"no-tcp-syn-probes", no_argument, &args->tcp_syn_disabled, 1}, 
+        {0, 0, 0, 0}
+    };
 
     char *endptr;
     int option_id, option_index = 0;
@@ -70,14 +82,14 @@ static int parse_args(int argc, char **argv, struct args *args)
         case 0:
             continue;
         case 't':
-            args->TIMEOUT_NS = strtoull(optarg, &endptr, 0);
-            if (*endptr != '\0') {
+            args->timeout_ns = strtoull(optarg, &endptr, 0);
+            if (*endptr != '\0' || args->timeout_ns == 0) {
                 fprintf(stderr, "Invalid number specified.\n");
                 goto help;
             }
             break;
         case 'n':
-            args->MAX_ELEM = strtoul(optarg, &endptr, 0);
+            args->max_elem = strtoul(optarg, &endptr, 0);
             if (*endptr != '\0') {
                 fprintf(stderr, "Invalid number specified.\n");
                 goto help;
@@ -86,6 +98,15 @@ static int parse_args(int argc, char **argv, struct args *args)
         default:
             goto help;
         };
+    }
+
+    if (args->indirect_disabled && args->indirect_enabled) {
+        fprintf(stderr, "The '--indirect' and '--no-indirect' flags are mutually exclusive!\n");
+        goto help;
+    }
+    if (args->tcp_syn_disabled && args->tcp_syn_enabled) {
+        fprintf(stderr, "The '--tcp-syn-probes' and '--no-tcp-syn-probes' flags are mutually exclusive!\n");
+        goto help;
     }
 
     if (optind == argc - 1) {
@@ -125,16 +146,23 @@ static struct traceroute *traceroute_init(const struct args *args)
     }
 
     if (args->indirect_enabled)
-        traceroute->rodata->INDIRECT_TRACE_ENABLED = 1;
+        traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED = 1;
+    else if (args->indirect_disabled)
+        traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED = 0;
 
-    if (args->TIMEOUT_NS)
-        traceroute->rodata->TIMEOUT_NS = args->TIMEOUT_NS;
+    if (args->tcp_syn_enabled)
+        traceroute->rodata->CONFIG_TCP_SYN_ENABLED = 1;
+    else if (args->tcp_syn_disabled)
+        traceroute->rodata->CONFIG_TCP_SYN_ENABLED = 0;
 
-    if (args->MAX_ELEM) {
+    if (args->timeout_ns)
+        traceroute->rodata->CONFIG_TIMEOUT_NS = args->timeout_ns;
+
+    if (args->max_elem) {
         if (bpf_map__set_max_entries(traceroute->maps.map_sessions,
-                                     args->MAX_ELEM) < 0) {
+                                     args->max_elem) < 0) {
             fprintf(stderr, "Failed to set maximum number of elements to %u\n",
-                    args->MAX_ELEM);
+                    args->max_elem);
             goto cleanup;
         }
     }
@@ -227,11 +255,13 @@ int main(int argc, char **argv)
         goto destroy;
 
     fprintf(stderr, "\n\nSession timeout in nanoseconds: %llu\n",
-            tr->rodata->TIMEOUT_NS);
+            tr->rodata->CONFIG_TIMEOUT_NS);
     fprintf(stderr, "Maximum session entries: %u\n",
             bpf_map__max_entries(tr->maps.map_sessions));
-    fprintf(stderr, "Indirect trace enabled: %s\n\n\n",
-            tr->rodata->INDIRECT_TRACE_ENABLED ? "yes" : "no");
+    fprintf(stderr, "Indirect trace enabled: %s\n",
+            tr->rodata->CONFIG_INDIRECT_TRACE_ENABLED ? "yes" : "no");
+    fprintf(stderr, "TCP SYN probes enabled: %s\n\n\n",
+            tr->rodata->CONFIG_TCP_SYN_ENABLED ? "yes" : "no");
 
     log_buf = ring_buffer__new(bpf_map__fd(tr->maps.log_buf), log_message, NULL,
                                NULL);

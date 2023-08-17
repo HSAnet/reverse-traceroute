@@ -30,9 +30,12 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 // The default value for the session entry timeout if not overridden by the
 // loader
 #define DEFAULT_TIMEOUT_NS 5000000000
-extern volatile const __u64 TIMEOUT_NS;
+extern volatile const __u64 CONFIG_TIMEOUT_NS;
 
 #define DEFAULT_INDIRECT_TRACE_ENABLED false
-extern volatile const bool INDIRECT_TRACE_ENABLED;
+extern volatile const bool CONFIG_INDIRECT_TRACE_ENABLED;
+
+#define DEFAULT_TCP_SYN_ENABLED true
+extern volatile const bool CONFIG_TCP_SYN_ENABLED;
 
 #endif

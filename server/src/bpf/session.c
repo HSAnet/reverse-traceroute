@@ -95,7 +95,7 @@ INTERNAL int session_add(const struct session_key *session,
         goto err;
     if (bpf_timer_set_callback(&state_ptr->timer, session_timeout_callback) < 0)
         goto err;
-    if (bpf_timer_start(&state_ptr->timer, TIMEOUT_NS, 0) < 0)
+    if (bpf_timer_start(&state_ptr->timer, CONFIG_TIMEOUT_NS, 0) < 0)
         goto err;
 
     log_message(SESSION_CREATED, session);

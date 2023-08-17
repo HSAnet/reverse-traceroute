@@ -19,6 +19,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 #include "probe.h"
 #include "cursor.h"
+#include "config.h"
 #include "csum.h"
 #include "resize.h"
 #include "tr_error.h"
@@ -48,13 +49,15 @@ static int probe_match_icmp(struct cursor *cursor, __u8 is_request,
         return -1;
 
     if (is_request) {
-        if (!(icmp->type == G_ICMP_ECHO_REQUEST && icmp->code == 0))
-            return -1;
+        if (icmp->type == G_ICMP_ECHO_REQUEST && icmp->code == 0)
+            goto ok;
     } else {
-        if (!(icmp->type == G_ICMP_ECHO_REPLY && icmp->code == 0))
-            return -1;
+        if (icmp->type == G_ICMP_ECHO_REPLY && icmp->code == 0)
+            goto ok;
     }
+    return -1;
 
+ok:
     *identifier = icmp->un.echo.id;
     return 0;
 }
@@ -78,14 +81,11 @@ static int probe_match_udp(struct cursor *cursor, __u8 is_request,
     // as the identifier is encoded into the checksum.
     // A direct response from the target will most likely alter the
     // checksum of the response and render the identifier useless.
-    if (is_request) {
-        if (udp->source != SOURCE_PORT)
-            return -1;
-    } else
-        return -1;
-
-    *identifier = udp->check;
-    return 0;
+    if (is_request && udp->source == SOURCE_PORT) {
+        *identifier = udp->check;
+        return 0;
+    }
+    return -1;
 }
 
 /*
@@ -104,22 +104,33 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request,
     if (is_request) {
         if (PARSE(cursor, (__be64 **)&tcp) < 0)
             return -1;
-        if (tcp->source != SOURCE_PORT)
-            return -1;
 
-        *identifier = bpf_htonl(tcp->seq);
+        if (tcp->source == SOURCE_PORT) {
+            *identifier = bpf_htonl(tcp->seq);
+            return 0;
+        }   
     } else {
         if (PARSE(cursor, &tcp) < 0)
             return -1;
         if (tcp->dest != SOURCE_PORT)
             return -1;
-        if (!tcp->rst && !(tcp->syn && tcp->ack))
-            return -1;
 
-        *identifier = bpf_ntohl(tcp->ack_seq) - 1;
+        // Make sure the ACK flag is set, as only in that
+        // case can we evaluate the ack-number, which contains our identifier.
+        // We expect only SYN or RST packets, depending on whether the port was open.
+        // Any other traffic can not created by traceroute probes.
+        // In order to parse the packet, the ACK flag MUST be present, otherwise
+        // the acknowledgement number carries no meaning.
+        // We rely on the ack-number to carry back the original sequence
+        if ((tcp->ack && tcp->rst) || (tcp->ack && CONFIG_TCP_SYN_ENABLED && tcp->syn)) {
+            *identifier = bpf_ntohl(tcp->ack_seq);
+            // An RST-ACK to a non-syn packet carries the previous sequence.
+            // An ACK packet triggered by a SYN carries the incremented sequence.
+            if (CONFIG_TCP_SYN_ENABLED) *identifier -= 1;
+            return 0;
+        }
     }
-
-    return 0;
+    return -1;
 }
 
 static tr_error probe_check_icmp(const struct probe *probe)
@@ -246,7 +257,7 @@ static int probe_set_tcp(struct cursor *cursor, struct probe *probe,
     tcp->source = SOURCE_PORT;
     tcp->seq = bpf_htonl(probe->identifier);
 
-    tcp->syn = 1;
+    if (CONFIG_TCP_SYN_ENABLED) tcp->syn = 1;
     tcp->doff = 6;
 
     tcp->window = bpf_htons(1024);
