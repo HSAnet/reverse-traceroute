@@ -46,7 +46,7 @@ static void response_init_eth_ip(struct ethhdr *eth, iphdr_t *ip, ipaddr_t from,
 
 static void response_init_icmp(__u16 session_id,
                                struct icmphdr *icmp, union trhdr *tr,
-                               probe_error error, __be16 value)
+                               tr_error error, __be16 value)
 {
     icmp->type = G_ICMP_ECHO_REPLY;
     icmp->code = 1;
@@ -58,78 +58,71 @@ static void response_init_icmp(__u16 session_id,
     tr->response.reserved = value;
 }
 
+INTERNAL int response_create_err(struct cursor *cursor,
+                                 struct response_args *args,
+                                 struct response_err_args *err_args,
+                                 struct ethhdr **eth, iphdr_t **ip)
+{
+    struct icmphdr *icmp;
+    union trhdr *tr;
+
+    const __u16 payload_len = sizeof(*icmp) + sizeof(*tr);
+    if (resize_l3hdr(cursor, payload_len, eth, ip) < 0)
+        return -1;
+
+    if (PARSE(cursor, &icmp) < 0)
+        return -1;
+    if (PARSE(cursor, &tr) < 0)
+        return -1;
+
+    response_init_eth_ip(*eth, *ip, (**ip).daddr, args->origin);
+    response_init_icmp(args->session_id, icmp, tr, err_args->error, err_args->value);
+
+    icmp->checksum = 0;
+    icmp->checksum = csum(icmp, payload_len, G_ICMP_PSEUDOHDR(**ip, payload_len));
+
+    return 0;
+}
+
 INTERNAL int response_create(struct cursor *cursor,
                              struct response_args *args,
+                             struct response_payload_args *payload_args,
                              struct ethhdr **eth, iphdr_t **ip)
 {
     struct icmphdr *icmp;
     union trhdr *tr;
     struct trhdr_payload *payload;
-    __u64 timespan_ns;
 
-    struct session_state *state = args->state;
-    probe_error error = args->error;
-    __be16 value = args->value;
+    const __u16 payload_len = sizeof(*icmp) + sizeof(*tr) + sizeof(*payload);
+    if (resize_l3hdr(cursor, payload_len, eth, ip) < 0)
+        return -1;
 
-    ipaddr_t dest_addr = state->origin;
-    ipaddr_t source_addr = (**ip).daddr;
-    ipaddr_t from_addr = (**ip).saddr;
+    if (PARSE(cursor, &icmp) < 0)
+        return -1;
+    if (PARSE(cursor, &tr) < 0)
+        return -1;
 
+    if (PARSE(cursor, &payload) < 0)
+        return -1;
 
-    if (error == ERR_NONE) {
-        __u16 payload_len = sizeof(*icmp) + sizeof(*tr) + sizeof(*payload);
-
-        if (resize_l3hdr(cursor, payload_len, eth, ip) < 0)
-            return -1;
-
-        if (PARSE(cursor, &icmp) < 0)
-            return -1;
-        if (PARSE(cursor, &tr) < 0)
-            return -1;
-
-        if (PARSE(cursor, &payload) < 0)
-            return -1;
+    response_init_eth_ip(*eth, *ip, (**ip).daddr, args->origin);
+    response_init_icmp(args->session_id, icmp, tr, 0, 0);
 
 #if defined(TRACEROUTE_V4)
-        for (int i = 0; i < 5; i++)
-            payload->addr.in6_u.u6_addr16[i] = 0;
+    for (int i = 0; i < 5; i++)
+        payload->addr.in6_u.u6_addr16[i] = 0;
 
-        payload->addr.in6_u.u6_addr16[5] = 0xffff;
-        payload->addr.in6_u.u6_addr32[3] = from_addr;
+    payload->addr.in6_u.u6_addr16[5] = 0xffff;
+    payload->addr.in6_u.u6_addr32[3] = payload_args->hop;
 #elif defined(TRACEROUTE_V6)
-        payload->addr = from_addr;
+    payload->addr = payload_args->hop;
 #endif
 
-        // Calculate timestamp.
-        timespan_ns = bpf_ktime_get_ns() - state->timestamp_ns;
-        payload->timespan_ns = bpf_htonl(timespan_ns);
+    // Set the timestamp
+    payload->timespan_ns = bpf_htonl(payload_args->timespan_ns);
 
-        response_init_eth_ip(*eth, *ip, source_addr, dest_addr);
-        response_init_icmp(args->session_id, icmp, tr, error, value);
-
-        __be32 seed = G_ICMP_PSEUDOHDR(**ip, payload_len);
-
-        icmp->checksum = 0;
-        icmp->checksum = csum(icmp, payload_len, seed);
-    } else {
-        __u16 payload_len = sizeof(*icmp) + sizeof(*tr);
-
-        if (resize_l3hdr(cursor, payload_len, eth, ip) < 0)
-            return -1;
-
-        if (PARSE(cursor, &icmp) < 0)
-            return -1;
-        if (PARSE(cursor, &tr) < 0)
-            return -1;
-
-        response_init_eth_ip(*eth, *ip, source_addr, dest_addr);
-        response_init_icmp(args->session_id, icmp, tr, error, value);
-
-        __be32 seed = G_ICMP_PSEUDOHDR(**ip, payload_len);
-
-        icmp->checksum = 0;
-        icmp->checksum = csum(icmp, payload_len, seed);
-    }
+    icmp->checksum = 0;
+    icmp->checksum = csum(icmp, payload_len, G_ICMP_PSEUDOHDR(**ip, payload_len));
 
     return 0;
 }

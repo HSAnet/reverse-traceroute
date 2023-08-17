@@ -21,6 +21,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include "cursor.h"
 #include "csum.h"
 #include "resize.h"
+#include "tr_error.h"
 #include "swap_addr.h"
 #include <linux/bpf.h>
 #include <linux/tcp.h>
@@ -121,12 +122,27 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request,
     return 0;
 }
 
+static tr_error probe_check_icmp(const struct probe *probe)
+{
+    return ERR_NONE;
+}
+
+static tr_error probe_check_udp(const struct probe *probe)
+{
+    return ERR_NONE;
+}
+
+static tr_error probe_check_tcp(const struct probe *probe)
+{
+    return ERR_NONE;
+}
+
 /*
  * Creates an ICMP probe packet with given probe arguments, e.g. flow and probe
  * identifier. Returns a negative value on failure, 0 on success and positive
  * values on an invalid configuration.
  */
-static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
+static int probe_set_icmp(struct cursor *cursor, struct probe *probe,
                                   struct ethhdr **eth, iphdr_t **ip)
 {
     struct icmphdr *icmp;
@@ -155,7 +171,7 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
     payload->i16[3] = 0;
     payload->i16[3] = csum(icmp, sizeof(*icmp) + sizeof(*payload), seed);
 
-    return ERR_NONE;
+    return 0;
 }
 
 /*
@@ -163,7 +179,7 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
  * identifier. Returns a negative value on failure, 0 on success and positive
  * values on an invalid configuration.
  */
-static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
+static int probe_set_udp(struct cursor *cursor, struct probe *probe,
                                  struct ethhdr **eth, iphdr_t **ip)
 {
     struct udphdr *udp;
@@ -192,7 +208,7 @@ static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
     payload->i16[3] = 0;
     payload->i16[3] = csum(udp, sizeof(*udp) + sizeof(*payload), pseudo_hdr);
 
-    return ERR_NONE;
+    return 0;
 }
 
 /*
@@ -200,7 +216,7 @@ static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
  * identifier. Returns a negative value on failure, 0 on success and positive
  * values on an invalid configuration.
  */
-static probe_error probe_set_tcp(struct cursor *cursor, struct probe *probe,
+static int probe_set_tcp(struct cursor *cursor, struct probe *probe,
                                  struct ethhdr **eth, iphdr_t **ip)
 {
     struct tcphdr *tcp;
@@ -242,7 +258,7 @@ static probe_error probe_set_tcp(struct cursor *cursor, struct probe *probe,
     tcp->check = 0;
     tcp->check = csum(tcp, sizeof(*tcp) + sizeof(*mss_option), pseudo_hdr);
 
-    return ERR_NONE;
+    return 0;
 }
 
 /*
@@ -265,6 +281,25 @@ INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request,
     }
 }
 
+static tr_error probe_check(const struct probe_args *args)
+{
+    if (args->ttl == 0)
+        return ERR_TTL;
+    
+    switch (args->proto) {
+        case G_PROTO_ICMP:
+            return probe_check_icmp(&args->probe);
+        case IPPROTO_UDP:
+            return probe_check_udp(&args->probe);
+        case IPPROTO_TCP:
+            return probe_check_tcp(&args->probe);
+        default:
+            return ERR_PROTO;
+    }
+
+    return ERR_NONE;
+}
+
 /*
  * Resizes the packet, creates the probe and adjusts the ip header to reflect
  * the changes. A negative value is returned on failure, 0 on success and a
@@ -277,13 +312,19 @@ INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
     int ret;
     struct probe *probe = &args->probe;
 
-    if (args->ttl == 0)
-        return ERR_TTL;
+    // Set the default protocol if not specified (proto == 0).
     if (args->proto == 0)
         args->proto = G_PROTO_ICMP;
 
+    if ((ret = probe_check(args)) != ERR_NONE)
+        return ret;
+
+    // Swap addresses.
+    swap_addr(*eth, *ip, target);
+    G_IP_NEXTHDR(**ip) = args->proto;
+    G_IP_TTL(**ip) = args->ttl;
+
     switch (args->proto) {
-    // In case of 0 we MUST use a suitable default value.
     case G_PROTO_ICMP:
         ret = probe_set_icmp(cursor, probe, eth, ip);
         break;
@@ -294,20 +335,15 @@ INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
         ret = probe_set_tcp(cursor, probe, eth, ip);
         break;
     default:
-        ret = ERR_PROTO;
+        // Should already be handled by probe_check(...)
+        return ERR_PROTO;
     }
 
-    if (ret != ERR_NONE)
+    if (ret < 0)
         return ret;
 
-    // Swap addresses.
-    swap_addr(*eth, *ip, target);
-
-    G_IP_NEXTHDR(**ip) = args->proto;
-    G_IP_TTL(**ip) = args->ttl;
-
+    // Compute the checksum after setting the probe,
+    // as the the packet is resized in the process (changing the ip->len field).
     G_IP_CSUM_COMPUTE(**ip);
-
-    // Packet is ready to be sent.
-    return ERR_NONE;
+    return 0;
 }

@@ -24,17 +24,33 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include "probe.h"
 #include "session.h"
 #include "ip_generic.h"
+#include "tr_error.h"
 #include <linux/if_ether.h>
 
 struct response_args {
     __u16 session_id;
-    struct session_state *state;
-    probe_error error;
-    __be16 value;
+    ipaddr_t origin;
 };
 
-INTERNAL int response_create(struct cursor *cursor,
+struct response_err_args {
+    tr_error error;
+    __be16 value;
+    __be16 padding;
+};
+
+struct response_payload_args {
+    ipaddr_t hop;
+    __u64 timespan_ns;
+};
+
+INTERNAL int response_create_err(struct cursor *cursor,
                              struct response_args *args,
+                             struct response_err_args *err_args,
+                             struct ethhdr **eth, iphdr_t **ip);
+
+INTERNAL int response_create(struct cursor *cursor,
+                            struct response_args *args,
+                            struct response_payload_args *payload_args,
                              struct ethhdr **eth, iphdr_t **ip);
 
 #endif

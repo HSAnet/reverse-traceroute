@@ -25,12 +25,16 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include "response.h"
 #include "session.h"
 #include "ip_generic.h"
+#include "tr_error.h"
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 #include <linux/bpf.h>
 #include <linux/icmp.h>
 #include <linux/if_packet.h>
 #include <linux/pkt_cls.h>
+
+
+typedef int tc_action;
 
 
 static int parse_mp_hdr(struct cursor *cursor)
@@ -49,15 +53,18 @@ static int parse_mp_hdr(struct cursor *cursor)
  * the originator. Otherwise a response notifying the originator about the
  * invalid configuration is dispatched.
  */
-static int handle_request(struct cursor *cursor, struct ethhdr **eth,
+static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
                           iphdr_t **ip, struct icmphdr **icmp)
 {
     // Set on error condition
-    int err, err_value = 0;
+    struct response_err_args err_args = {.padding = 0, .error = 0, .value = 0};
     union trhdr *tr;
 
     __be16 session_id = (*icmp)->un.echo.id;
-    ipaddr_t target = (**ip).saddr;
+    ipaddr_t origin = (**ip).saddr;
+
+    // Initial target is the tr-requests origin, may be overwritten by multipart.
+    ipaddr_t target = origin;
 
     if (PARSE(cursor, &tr) < 0)
         return TC_ACT_SHOT;
@@ -82,14 +89,12 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
             target = *addr;
 #endif
         } else {
-            err = ERR_MULTIPART_NOT_SUPPORTED;
-            err_value = bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type);
+            err_args.error = ERR_MULTIPART_NOT_SUPPORTED;
+            err_args.value = bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type);
             goto error;
         }
     }
 
-    struct session_state state =
-        SESSION_NEW_STATE(bpf_ktime_get_ns(), (**ip).saddr);
 
     struct probe_args args = {
         .ttl = tr->request.ttl,
@@ -98,12 +103,13 @@ static int handle_request(struct cursor *cursor, struct ethhdr **eth,
         .probe.identifier = session_id,
     };
 
-    if ((err = probe_create(cursor, &args, eth, ip, &target)) < 0)
+    if ((err_args.error = probe_create(cursor, &args, eth, ip, &target)) < 0)
         return TC_ACT_SHOT;
 
-
-    if (err == ERR_NONE) {
+    if (err_args.error == ERR_NONE) {
         struct session_key session = SESSION_NEW_KEY(target, session_id);
+        struct session_state state =
+            SESSION_NEW_STATE(bpf_ktime_get_ns(), origin);
         if (session_add(&session, &state) < 0)
             return TC_ACT_SHOT;
         goto redirect;
@@ -116,11 +122,9 @@ error:;
     //  regular: timestamp
     struct response_args resp_args = {
         .session_id = session_id,
-        .state = &state,
-        .error = err,
-        .value = err_value,
+        .origin = origin,
     };
-    if (response_create(cursor, &resp_args, eth, ip) < 0)
+    if (response_create_err(cursor, &resp_args, &err_args, eth, ip) < 0)
         return TC_ACT_SHOT;
 redirect:
     return bpf_redirect(cursor->skb->ifindex, 0);
@@ -151,7 +155,7 @@ static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
  * In the latter case, an answer to the originator is created
  * and associated state cleaned up.
  */
-static int handle(struct cursor *cursor)
+static tc_action handle(struct cursor *cursor)
 {
     struct ethhdr *eth;
     iphdr_t *ip;
@@ -220,16 +224,18 @@ static int handle(struct cursor *cursor)
 
     struct response_args args = {
         .session_id = session.identifier,
-        .state = state,
-        .error = ERR_NONE,
-        .value = 0,
+        .origin = state->origin,
+    };
+    struct response_payload_args payload_args = {
+        .timespan_ns = bpf_ktime_get_ns() - state->timestamp_ns,
+        .hop = ip->saddr,
     };
     // Remove the session from our table and respond to the original requestor.
     // Note: It is safe to access map elements after a delete call as execution
     // takes places under an RCU read lock.
     // Data associated with the deleted map entry will be reclaimed after
     // program execution ends.
-    if (response_create(cursor, &args, &eth, &ip) < 0)
+    if (response_create(cursor, &args, &payload_args, &eth, &ip) < 0)
         goto drop;
     return bpf_redirect(cursor->skb->ifindex, 0);
 
@@ -246,7 +252,7 @@ drop:
  * Only handles IP packets addressed to this host.
  */
 SEC("tc")
-int prog(struct __sk_buff *skb)
+tc_action prog(struct __sk_buff *skb)
 {
     if (skb->pkt_type != PACKET_HOST)
         return TC_ACT_UNSPEC;
