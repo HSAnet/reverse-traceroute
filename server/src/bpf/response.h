@@ -44,13 +44,12 @@ struct response_payload_args {
 };
 
 INTERNAL int response_create_err(struct cursor *cursor,
-                             struct response_args *args,
-                             struct response_err_args *err_args,
-                             struct ethhdr **eth, iphdr_t **ip);
+                                 struct response_args *args,
+                                 struct response_err_args *err_args,
+                                 struct ethhdr **eth, iphdr_t **ip);
 
-INTERNAL int response_create(struct cursor *cursor,
-                            struct response_args *args,
-                            struct response_payload_args *payload_args,
+INTERNAL int response_create(struct cursor *cursor, struct response_args *args,
+                             struct response_payload_args *payload_args,
                              struct ethhdr **eth, iphdr_t **ip);
 
 #endif

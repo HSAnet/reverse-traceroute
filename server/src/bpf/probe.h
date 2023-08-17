@@ -42,7 +42,6 @@ struct probe_args {
     struct probe probe;
 };
 
-
 INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
                           struct ethhdr **eth, iphdr_t **ip,
                           const ipaddr_t *target);

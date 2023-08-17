@@ -33,9 +33,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/if_packet.h>
 #include <linux/pkt_cls.h>
 
-
 typedef int tc_action;
-
 
 static int parse_mp_hdr(struct cursor *cursor)
 {
@@ -46,7 +44,6 @@ static int parse_mp_hdr(struct cursor *cursor)
     return -1;
 }
 
-
 /*
  * Parses the reverse traceroute request header.
  * On a valid configuration state is created and a traceroute probe sent back to
@@ -54,7 +51,7 @@ static int parse_mp_hdr(struct cursor *cursor)
  * invalid configuration is dispatched.
  */
 static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
-                          iphdr_t **ip, struct icmphdr **icmp)
+                                iphdr_t **ip, struct icmphdr **icmp)
 {
     // Set on error condition
     struct response_err_args err_args = {.padding = 0, .error = 0, .value = 0};
@@ -63,22 +60,23 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
     __be16 session_id = (*icmp)->un.echo.id;
     ipaddr_t origin = (**ip).saddr;
 
-    // Initial target is the tr-requests origin, may be overwritten by multipart.
+    // Initial target is the tr-requests origin, may be overwritten by
+    // multipart.
     ipaddr_t target = origin;
 
     if (PARSE(cursor, &tr) < 0)
         return TC_ACT_SHOT;
 
-
     if ((long)cursor->pos < cursor_end(cursor)) {
         if (parse_mp_hdr(cursor) < 0)
             return TC_ACT_SHOT;
-        
+
         struct icmp_extobj_hdr *obj;
         if (PARSE(cursor, &obj) < 0)
             return TC_ACT_SHOT;
 
-        if (INDIRECT_TRACE_ENABLED && bpf_ntohs(obj->length) == 16 && obj->class_num == 5 && obj->class_type == 0) {
+        if (INDIRECT_TRACE_ENABLED && bpf_ntohs(obj->length) == 16 &&
+            obj->class_num == 5 && obj->class_type == 0) {
             struct in6_addr *addr;
             if (PARSE(cursor, &addr) < 0)
                 return TC_ACT_SHOT;
@@ -90,11 +88,11 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
 #endif
         } else {
             err_args.error = ERR_MULTIPART_NOT_SUPPORTED;
-            err_args.value = bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type);
+            err_args.value =
+                bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type);
             goto error;
         }
     }
-
 
     struct probe_args args = {
         .ttl = tr->request.ttl,
@@ -116,8 +114,10 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
     }
 
 error:;
-    // TODO: response_create should not rely on state, as tstamp is not always needed
-    // -> Refactor in error and not err with common args: session_id, origin_addr
+    // TODO: response_create should not rely on state, as tstamp is not always
+    // needed
+    // -> Refactor in error and not err with common args: session_id,
+    // origin_addr
     //  err-args: err, err_value
     //  regular: timestamp
     struct response_args resp_args = {

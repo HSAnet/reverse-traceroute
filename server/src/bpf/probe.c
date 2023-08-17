@@ -143,7 +143,7 @@ static tr_error probe_check_tcp(const struct probe *probe)
  * values on an invalid configuration.
  */
 static int probe_set_icmp(struct cursor *cursor, struct probe *probe,
-                                  struct ethhdr **eth, iphdr_t **ip)
+                          struct ethhdr **eth, iphdr_t **ip)
 {
     struct icmphdr *icmp;
     union {
@@ -180,7 +180,7 @@ static int probe_set_icmp(struct cursor *cursor, struct probe *probe,
  * values on an invalid configuration.
  */
 static int probe_set_udp(struct cursor *cursor, struct probe *probe,
-                                 struct ethhdr **eth, iphdr_t **ip)
+                         struct ethhdr **eth, iphdr_t **ip)
 {
     struct udphdr *udp;
     __be32 pseudo_hdr;
@@ -217,7 +217,7 @@ static int probe_set_udp(struct cursor *cursor, struct probe *probe,
  * values on an invalid configuration.
  */
 static int probe_set_tcp(struct cursor *cursor, struct probe *probe,
-                                 struct ethhdr **eth, iphdr_t **ip)
+                         struct ethhdr **eth, iphdr_t **ip)
 {
     struct tcphdr *tcp;
     struct {
@@ -261,6 +261,24 @@ static int probe_set_tcp(struct cursor *cursor, struct probe *probe,
     return 0;
 }
 
+static tr_error probe_check(const struct probe_args *args)
+{
+    if (args->ttl == 0)
+        return ERR_TTL;
+
+    switch (args->proto) {
+    case G_PROTO_ICMP:
+        return probe_check_icmp(&args->probe);
+    case IPPROTO_UDP:
+        return probe_check_udp(&args->probe);
+    case IPPROTO_TCP:
+        return probe_check_tcp(&args->probe);
+    default:
+        return ERR_PROTO;
+    }
+
+    return ERR_NONE;
+}
 /*
  * Attempts to match a packet as a possible probe response.
  * Returns a negative value on no match and a positive value for the possible
@@ -279,25 +297,6 @@ INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request,
     default:
         return -1;
     }
-}
-
-static tr_error probe_check(const struct probe_args *args)
-{
-    if (args->ttl == 0)
-        return ERR_TTL;
-    
-    switch (args->proto) {
-        case G_PROTO_ICMP:
-            return probe_check_icmp(&args->probe);
-        case IPPROTO_UDP:
-            return probe_check_udp(&args->probe);
-        case IPPROTO_TCP:
-            return probe_check_tcp(&args->probe);
-        default:
-            return ERR_PROTO;
-    }
-
-    return ERR_NONE;
 }
 
 /*

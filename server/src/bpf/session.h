@@ -38,10 +38,9 @@ struct session_state {
 #endif
 };
 
-
 #define SESSION_NEW_KEY(x, y)                                                  \
     {                                                                          \
-        .padding = 0, .target = (x), .identifier = (y)                           \
+        .padding = 0, .target = (x), .identifier = (y)                         \
     }
 
 #if defined(TRACEROUTE_V4)

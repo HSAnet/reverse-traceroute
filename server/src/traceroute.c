@@ -42,10 +42,10 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #endif
 #define FILTER_PRIO 1
 struct args {
-    int ifindex;            // Always specified by the user
-    int indirect_enabled;   // Optional, 0 if not specified
-    __u64 TIMEOUT_NS;       // Optional, 0 if not specified
-    __u32 MAX_ELEM;         // Optional, 0 if not specified
+    int ifindex;          // Always specified by the user
+    int indirect_enabled; // Optional, 0 if not specified
+    __u64 TIMEOUT_NS;     // Optional, 0 if not specified
+    __u32 MAX_ELEM;       // Optional, 0 if not specified
 };
 
 const char *fmt_help_message =
@@ -59,13 +59,12 @@ static int parse_args(int argc, char **argv, struct args *args)
     memset(args, 0, sizeof(*args));
 
     struct option long_opts[] = {
-        {"indirect", no_argument, &args->indirect_enabled, 1},
-        {0, 0, 0, 0}
-    };
+        {"indirect", no_argument, &args->indirect_enabled, 1}, {0, 0, 0, 0}};
 
     char *endptr;
     int option_id, option_index = 0;
-    while ((option_id = getopt_long(argc, argv, "t:n:h", long_opts, &option_index)) != -1) {
+    while ((option_id = getopt_long(argc, argv, "t:n:h", long_opts,
+                                    &option_index)) != -1) {
         switch (option_id) {
         // Long option encountered
         case 0:

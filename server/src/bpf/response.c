@@ -44,9 +44,8 @@ static void response_init_eth_ip(struct ethhdr *eth, iphdr_t *ip, ipaddr_t from,
     G_IP_CSUM_COMPUTE(*ip);
 }
 
-static void response_init_icmp(__u16 session_id,
-                               struct icmphdr *icmp, union trhdr *tr,
-                               tr_error error, __be16 value)
+static void response_init_icmp(__u16 session_id, struct icmphdr *icmp,
+                               union trhdr *tr, tr_error error, __be16 value)
 {
     icmp->type = G_ICMP_ECHO_REPLY;
     icmp->code = 1;
@@ -76,16 +75,17 @@ INTERNAL int response_create_err(struct cursor *cursor,
         return -1;
 
     response_init_eth_ip(*eth, *ip, (**ip).daddr, args->origin);
-    response_init_icmp(args->session_id, icmp, tr, err_args->error, err_args->value);
+    response_init_icmp(args->session_id, icmp, tr, err_args->error,
+                       err_args->value);
 
     icmp->checksum = 0;
-    icmp->checksum = csum(icmp, payload_len, G_ICMP_PSEUDOHDR(**ip, payload_len));
+    icmp->checksum =
+        csum(icmp, payload_len, G_ICMP_PSEUDOHDR(**ip, payload_len));
 
     return 0;
 }
 
-INTERNAL int response_create(struct cursor *cursor,
-                             struct response_args *args,
+INTERNAL int response_create(struct cursor *cursor, struct response_args *args,
                              struct response_payload_args *payload_args,
                              struct ethhdr **eth, iphdr_t **ip)
 {
@@ -122,7 +122,8 @@ INTERNAL int response_create(struct cursor *cursor,
     payload->timespan_ns = bpf_htonl(payload_args->timespan_ns);
 
     icmp->checksum = 0;
-    icmp->checksum = csum(icmp, payload_len, G_ICMP_PSEUDOHDR(**ip, payload_len));
+    icmp->checksum =
+        csum(icmp, payload_len, G_ICMP_PSEUDOHDR(**ip, payload_len));
 
     return 0;
 }
