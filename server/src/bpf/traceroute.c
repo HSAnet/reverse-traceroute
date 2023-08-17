@@ -238,7 +238,7 @@ static tc_action handle(struct cursor *cursor)
 
 // Jump here to allow the packet to proceed.
 pass:
-    return TC_ACT_OK;
+    return TC_ACT_UNSPEC;
 // Jump here to drop the packet.
 drop:
     return TC_ACT_SHOT;
@@ -260,7 +260,7 @@ tc_action prog(struct __sk_buff *skb)
     if (bpf_ntohs(skb->protocol) == G_ETH_P_IP)
         return handle(&cursor);
 
-    return TC_ACT_OK;
+    return TC_ACT_UNSPEC;
 }
 
 char __license[] SEC("license") = "GPL";
