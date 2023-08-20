@@ -30,6 +30,16 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/if_ether.h>
 #include <bpf/bpf_endian.h>
 
+union tcp_payload {
+    struct {
+        __u8 kind;
+        __u8 len;
+        __u16 value;
+    }  mss_option;
+    __be32 data;
+};
+
+
 /*
  * Checks if the ICMP packet MAY be an answer to a probe.
  * In that case, the possible session identifier is returned.
@@ -127,6 +137,7 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request,
             // An RST-ACK to a non-syn packet carries the previous sequence.
             // An ACK packet triggered by a SYN carries the incremented sequence.
             if (CONFIG_TCP_SYN_ENABLED) *identifier -= 1;
+            else *identifier -= sizeof(union tcp_payload);
             return 0;
         }
     }
@@ -162,7 +173,9 @@ static int probe_set_icmp(struct cursor *cursor, struct probe *probe,
         __be16 i16[4];
     } * payload;
 
-    if (resize_l3hdr(cursor, sizeof(*icmp) + sizeof(*payload), eth, ip) < 0)
+    const __u16 payload_len = sizeof(*icmp) + sizeof(*payload);
+
+    if (resize_l3hdr(cursor, payload_len, eth, ip) < 0)
         return -1;
     if (PARSE(cursor, &icmp) < 0)
         return -1;
@@ -175,12 +188,12 @@ static int probe_set_icmp(struct cursor *cursor, struct probe *probe,
     icmp->un.echo.id = probe->identifier;
     icmp->un.echo.sequence = ICMP_PROBE_SEQ;
 
-    __be32 seed = G_ICMP_PSEUDOHDR(**ip, sizeof(*icmp) + sizeof(*payload));
+    __be32 seed = G_ICMP_PSEUDOHDR(**ip, payload_len);
 
     payload->i32[0] = bpf_get_prandom_u32();
     payload->i32[1] = bpf_get_prandom_u32();
     payload->i16[3] = 0;
-    payload->i16[3] = csum(icmp, sizeof(*icmp) + sizeof(*payload), seed);
+    payload->i16[3] = csum(icmp, payload_len, seed);
 
     return 0;
 }
@@ -200,7 +213,9 @@ static int probe_set_udp(struct cursor *cursor, struct probe *probe,
         __be16 i16[4];
     } * payload;
 
-    if (resize_l3hdr(cursor, sizeof(*udp) + sizeof(*payload), eth, ip) < 0)
+    const __u16 payload_len = sizeof(*udp) + sizeof(*payload);
+
+    if (resize_l3hdr(cursor, payload_len, eth, ip) < 0)
         return -1;
     if (PARSE(cursor, &udp) < 0)
         return -1;
@@ -208,16 +223,16 @@ static int probe_set_udp(struct cursor *cursor, struct probe *probe,
         return -1;
 
     pseudo_hdr =
-        pseudo_header(*ip, sizeof(*udp) + sizeof(*payload), IPPROTO_UDP);
+        pseudo_header(*ip, payload_len, IPPROTO_UDP);
     udp->dest = probe->flow ? probe->flow : bpf_htons(53);
     udp->source = SOURCE_PORT;
     udp->check = probe->identifier;
-    udp->len = bpf_htons(sizeof(*udp) + sizeof(*payload));
+    udp->len = bpf_htons(payload_len);
 
     payload->i32[0] = bpf_get_prandom_u32();
     payload->i32[1] = bpf_get_prandom_u32();
     payload->i16[3] = 0;
-    payload->i16[3] = csum(udp, sizeof(*udp) + sizeof(*payload), pseudo_hdr);
+    payload->i16[3] = csum(udp, payload_len, pseudo_hdr);
 
     return 0;
 }
@@ -231,22 +246,20 @@ static int probe_set_tcp(struct cursor *cursor, struct probe *probe,
                          struct ethhdr **eth, iphdr_t **ip)
 {
     struct tcphdr *tcp;
-    struct {
-        __u8 kind;
-        __u8 len;
-        __u16 value;
-    } * mss_option;
     __be32 pseudo_hdr;
+    union tcp_payload *payload;
 
-    if (resize_l3hdr(cursor, sizeof(*tcp) + sizeof(*mss_option), eth, ip) < 0)
+    const __u16 payload_len = sizeof(*tcp) + sizeof(*payload);
+
+    if (resize_l3hdr(cursor, payload_len, eth, ip) < 0)
         return -1;
     if (PARSE(cursor, &tcp) < 0)
         return -1;
-    if (PARSE(cursor, &mss_option) < 0)
+    if (PARSE(cursor, &payload) < 0)
         return -1;
 
     pseudo_hdr =
-        pseudo_header(*ip, sizeof(*tcp) + sizeof(*mss_option), IPPROTO_TCP);
+        pseudo_header(*ip, payload_len, IPPROTO_TCP);
     // Zero out tcp fields.
     *((__be32 *)tcp + 1) = 0;
     *((__be32 *)tcp + 2) = 0;
@@ -256,18 +269,22 @@ static int probe_set_tcp(struct cursor *cursor, struct probe *probe,
     tcp->dest = probe->flow ? probe->flow : bpf_htons(80);
     tcp->source = SOURCE_PORT;
     tcp->seq = bpf_htonl(probe->identifier);
-
-    if (CONFIG_TCP_SYN_ENABLED) tcp->syn = 1;
-    tcp->doff = 6;
-
     tcp->window = bpf_htons(1024);
 
-    mss_option->kind = 2;
-    mss_option->len = 4;
-    mss_option->value = bpf_htons(1460);
+    if (CONFIG_TCP_SYN_ENABLED) {
+        tcp->syn = 1;
+        tcp->doff = 6;
+        payload->mss_option.kind = 2;
+        payload->mss_option.len = 4;
+        payload->mss_option.value = bpf_htons(1460);
+    } else {
+        tcp->doff = 5;
+        payload->data = bpf_get_prandom_u32();
+    }
+
 
     tcp->check = 0;
-    tcp->check = csum(tcp, sizeof(*tcp) + sizeof(*mss_option), pseudo_hdr);
+    tcp->check = csum(tcp, payload_len, pseudo_hdr);
 
     return 0;
 }
