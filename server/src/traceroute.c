@@ -19,17 +19,14 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 #include "messages.h"
 #include "traceroute.skel.h"
+#include <linux/types.h>
 #include <arpa/inet.h>
 #include <bpf/libbpf.h>
 #include <getopt.h>
-#include <linux/types.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/resource.h>
-#include <getopt.h>
 #include <net/if.h>
-#include <fcntl.h>
 
 #if defined(TRACEROUTE_V4)
 #define FILTER_HANDLE 0xbeaf4
@@ -42,16 +39,18 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #endif
 #define FILTER_PRIO 1
 struct args {
-    int ifindex;          // Always specified by the user
+    // Always specified by the user
+    int ifindex;
 
+    // Optional arguments, 0 if not specified
     int indirect_enabled;
     int indirect_disabled;
 
-    int tcp_syn_enabled; // Optional, 0 if not specified
-    int tcp_syn_disabled; // Optional, 0 if not specified
+    int tcp_syn_enabled;
+    int tcp_syn_disabled;
 
-    __u64 timeout_ns;     // Optional, 0 if not specified
-    __u32 max_elem;       // Optional, 0 if not specified
+    __u64 timeout_ns;
+    __u32 max_elem;
 };
 
 const char *fmt_help_message =
@@ -130,14 +129,6 @@ help:
 
 static struct traceroute *traceroute_init(const struct args *args)
 {
-    struct rlimit mem_limit = {
-        .rlim_cur = RLIM_INFINITY,
-        .rlim_max = RLIM_INFINITY,
-    };
-
-    if (setrlimit(RLIMIT_MEMLOCK, &mem_limit) < 0)
-        fprintf(stderr, "Failed to remove the memlock limit.\n");
-
     struct traceroute *traceroute = traceroute__open();
 
     if (!traceroute) {
