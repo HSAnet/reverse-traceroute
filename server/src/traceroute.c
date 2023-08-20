@@ -22,20 +22,26 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/types.h>
 #include <arpa/inet.h>
 #include <bpf/libbpf.h>
+#include <errno.h>
 #include <getopt.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <net/if.h>
 
 #if defined(TRACEROUTE_V4)
 #define FILTER_HANDLE 0xbeaf4
 #define ADDRSTRLEN    INET_ADDRSTRLEN
 #define ADDR_FAMILY   AF_INET
+#include <linux/ip.h>
+typedef struct in_addr ipaddr_t;
 #elif defined(TRACEROUTE_V6)
 #define FILTER_HANDLE 0xbeaf6
 #define ADDRSTRLEN    INET6_ADDRSTRLEN
 #define ADDR_FAMILY   AF_INET6
+#include <linux/ipv6.h>
+typedef struct in6_addr ipaddr_t;
 #endif
 #define FILTER_PRIO 1
 struct args {
@@ -51,14 +57,17 @@ struct args {
 
     __u64 timeout_ns;
     __u32 max_elem;
+
+    char *allowed_sources_filename;
 };
 
 const char *fmt_help_message =
-    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--[no-]indirect] [--[no-]tcp-syn-probes] ifname\n"
+    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--[no-]indirect] [--[no-]tcp-syn-probes] [--allow-sources-from FILENAME] ifname\n"
     "\t-t: The time after which a session expires, in nanoseconds.\n"
     "\t-n: The maximum number of sessions the server can handle.\n"
     "\t--[no-]indirect: Whether or not the client is allowed to choose the trace target.\n"
-    "\t--[no-]tcp-syn-probes: Whether or not TCP probes are sent with the SYN flag set.\n";
+    "\t--[no-]tcp-syn-probes: Whether or not TCP probes are sent with the SYN flag set.\n"
+    "\t--allow-sources-from: The filename that contains valid subnets sources in CIDR notation.\n";
 
 static int parse_args(int argc, char **argv, struct args *args)
 {
@@ -69,6 +78,7 @@ static int parse_args(int argc, char **argv, struct args *args)
         {"no-indirect", no_argument, &args->indirect_disabled, 1}, 
         {"tcp-syn-probes", no_argument, &args->tcp_syn_enabled, 1}, 
         {"no-tcp-syn-probes", no_argument, &args->tcp_syn_disabled, 1}, 
+        {"allow-sources-from", required_argument, 0, 's'},
         {0, 0, 0, 0}
     };
 
@@ -80,6 +90,11 @@ static int parse_args(int argc, char **argv, struct args *args)
         // Long option encountered
         case 0:
             continue;
+        // Allowed sources filename
+        case 's':
+            args->allowed_sources_filename = strdup(optarg);
+            break;
+        // Timeout
         case 't':
             args->timeout_ns = strtoull(optarg, &endptr, 0);
             if (*endptr != '\0' || args->timeout_ns == 0) {
@@ -87,6 +102,7 @@ static int parse_args(int argc, char **argv, struct args *args)
                 goto help;
             }
             break;
+        // Maximum session elements
         case 'n':
             args->max_elem = strtoul(optarg, &endptr, 0);
             if (*endptr != '\0') {
@@ -127,12 +143,121 @@ help:
     return -1;
 }
 
+struct list_elem {
+    ipaddr_t addr;
+    __u8 prefixlen;
+    struct list_elem *next;
+};
+
+static int validate_prefixlen(ipaddr_t address, __u8 prefixlen)
+{
+    __be32 *chunk = (__be32 *) &address;
+
+    for (int i = 0; i < sizeof(address) / sizeof(*chunk); i++) {
+        if (prefixlen == 0)
+            break;
+
+        __be32 mask = htonl((__u32)0xffffffff << (32 - prefixlen));
+        if (chunk[i] != (chunk[i] & mask))
+            return -1;
+        
+        if (prefixlen < 32) break;
+        prefixlen -= 32;
+    }
+
+    return 0;
+}
+
+static int find_allowed_sources(struct traceroute *traceroute, const char *sources_filename, struct list_elem **head)
+{        
+    struct list_elem *list_head = NULL;
+    size_t list_len = 0;
+
+    FILE *sources = fopen(sources_filename, "r");
+    if (!sources) {
+        fprintf(stderr, "Failed to open '%s'!\n", sources_filename);
+        return -1;
+    }
+
+    char *line = NULL; size_t line_size = 0;
+    ssize_t nread;
+    errno = 0;
+    while ((nread = getline(&line, &line_size, sources)) > 0) {
+        // Replace newline with string-terminator
+        ipaddr_t addr;
+        line[nread-1] = '\0';
+        char *original_line = strdup(line);
+
+        char *address_start = strtok(line, "/");;
+        char *prefixlen_start = strtok(NULL, "/");
+
+        if (!prefixlen_start)
+            goto err_loop;
+
+        char *endptr;
+        unsigned long prefixlen = strtoul(prefixlen_start, &endptr, 0);
+        if (*endptr != '\0' || endptr == prefixlen_start || prefixlen > sizeof(ipaddr_t) * 8)
+            goto err_loop;
+
+        if (inet_pton(ADDR_FAMILY, address_start, &addr) == 0)
+            goto err_loop;
+        if (!validate_prefixlen(addr, prefixlen))
+            goto err_loop;
+
+        struct list_elem *new_elem = malloc(sizeof(*list_head));
+        new_elem->addr = addr;
+        new_elem->prefixlen = prefixlen;
+        new_elem->next = list_head;
+        list_head = new_elem;
+        list_len += 1;
+
+        free(original_line);
+        continue;
+err_loop:
+        fprintf(stderr, "'%s' is not a valid CIDR network! Skipping!\n", original_line);
+        free(original_line);
+    }
+    fclose(sources);
+    free(line);
+    if (errno) {
+        perror("getline: ");
+        return -1;
+    }
+
+    if (list_len == 0) {
+        fprintf(stderr, "No valid network entries found in '%s'!\n", sources_filename);
+        return -1;
+    }
+    if (bpf_map__set_max_entries(traceroute->maps.map_allowed_sources, list_len) < 0) {
+        fprintf(stderr, "Failed to set maximum number of allowed networks to %zu!\n", list_len);
+        return -1;
+    }
+
+    *head = list_head;
+    return 0;
+}
+
+static int update_allowed_sources(struct traceroute *traceroute, struct list_elem *list_head)
+{
+    __u32 counter = 0;
+
+    for (struct list_elem *elem = list_head; elem != NULL; elem = elem->next) {
+
+        if (bpf_map__update_elem(traceroute->maps.map_allowed_sources, &counter, sizeof(counter), &elem->addr, sizeof(elem->addr), 0) < 0) {
+            fprintf(stderr, "Failed to insert network into the map of allowed sources!\n");
+            return -1;
+        }
+        counter += 1;
+    }
+    return 0;
+}
+
 static struct traceroute *traceroute_init(const struct args *args)
 {
     struct traceroute *traceroute = traceroute__open();
 
     if (!traceroute) {
-        fprintf(stderr, "Failed to open the eBPF program.\n");
+        fprintf(stderr, "Failed to open the eBPF program!\n");
         goto err;
     }
 
@@ -152,15 +277,30 @@ static struct traceroute *traceroute_init(const struct args *args)
     if (args->max_elem) {
         if (bpf_map__set_max_entries(traceroute->maps.map_sessions,
                                      args->max_elem) < 0) {
-            fprintf(stderr, "Failed to set maximum number of elements to %u\n",
+            fprintf(stderr, "Failed to set maximum number of sessions to %u!\n",
                     args->max_elem);
             goto cleanup;
         }
     }
 
+    struct list_elem *list_head = NULL;
+    if (args->allowed_sources_filename) {
+        if (find_allowed_sources(traceroute, args->allowed_sources_filename, &list_head) < 0)
+            goto cleanup;
+    }
+
     if (traceroute__load(traceroute) < 0) {
-        fprintf(stderr, "Failed to load the program.\n");
+        fprintf(stderr, "Failed to load the program!\n");
         goto cleanup;
+    }
+
+    if (list_head && update_allowed_sources(traceroute, list_head) < 0)
+        goto cleanup;
+
+    while (list_head) {
+        struct list_elem *elem = list_head;
+        list_head = list_head->next;
+        free(elem);
     }
 
     return traceroute;

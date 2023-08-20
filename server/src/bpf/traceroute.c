@@ -24,6 +24,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include "proto.h"
 #include "response.h"
 #include "session.h"
+#include "source.h"
 #include "ip_generic.h"
 #include "tr_error.h"
 #include <bpf/bpf_endian.h>
@@ -53,6 +54,9 @@ static int parse_mp_hdr(struct cursor *cursor)
 static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
                                 iphdr_t **ip, struct icmphdr **icmp)
 {
+    if (source_allowed(&((**ip).saddr)) < 0)
+        return TC_ACT_SHOT;
+
     // Set on error condition
     struct response_err_args err_args = {.padding = 0, .error = 0, .value = 0};
     union trhdr *tr;
