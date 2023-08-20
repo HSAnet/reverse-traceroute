@@ -17,7 +17,9 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "ipaddr.h"
 #include "messages.h"
+#include "net.h"
 #include "traceroute.skel.h"
 #include <linux/types.h>
 #include <arpa/inet.h>
@@ -34,14 +36,10 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #define FILTER_HANDLE 0xbeaf4
 #define ADDRSTRLEN    INET_ADDRSTRLEN
 #define ADDR_FAMILY   AF_INET
-#include <linux/ip.h>
-typedef struct in_addr ipaddr_t;
 #elif defined(TRACEROUTE_V6)
 #define FILTER_HANDLE 0xbeaf6
 #define ADDRSTRLEN    INET6_ADDRSTRLEN
 #define ADDR_FAMILY   AF_INET6
-#include <linux/ipv6.h>
-typedef struct in6_addr ipaddr_t;
 #endif
 #define FILTER_PRIO 1
 struct args {
@@ -144,22 +142,26 @@ help:
 }
 
 struct list_elem {
-    ipaddr_t addr;
-    __u8 prefixlen;
+    struct net_entry entry;
     struct list_elem *next;
 };
 
-static int validate_prefixlen(ipaddr_t address, __u8 prefixlen)
+static int create_netmask(const ipaddr_t address, __u8 prefixlen, ipaddr_t *netmask)
 {
-    __be32 *chunk = (__be32 *) &address;
+    __be32 *addr_chunk = (__be32 *) &address;
+    __be32 *mask_chunk = (__be32 *) netmask;
 
-    for (int i = 0; i < sizeof(address) / sizeof(*chunk); i++) {
+    for (int i = 0; i < sizeof(address) / sizeof(*addr_chunk); i++) {
         if (prefixlen == 0)
             break;
 
         __be32 mask = htonl((__u32)0xffffffff << (32 - prefixlen));
-        if (chunk[i] != (chunk[i] & mask))
+
+        // Validate that no hostbits are set
+        if (addr_chunk[i] != (addr_chunk[i] & mask))
             return -1;
+
+        mask_chunk[i] = mask; 
         
         if (prefixlen < 32) break;
         prefixlen -= 32;
@@ -201,13 +203,16 @@ static int find_allowed_sources(struct traceroute *traceroute, const char *sourc
 
         if (inet_pton(ADDR_FAMILY, address_start, &addr) == 0)
             goto err_loop;
-        if (!validate_prefixlen(addr, prefixlen))
+
+        ipaddr_t netmask;
+        if (create_netmask(addr, prefixlen, &netmask) == 0)
             goto err_loop;
 
         struct list_elem *new_elem = malloc(sizeof(*list_head));
-        new_elem->addr = addr;
-        new_elem->prefixlen = prefixlen;
+        new_elem->entry.address = addr;
+        new_elem->entry.netmask = netmask;
         new_elem->next = list_head;
+
         list_head = new_elem;
         list_len += 1;
 
@@ -239,11 +244,12 @@ err_loop:
 
 static int update_allowed_sources(struct traceroute *traceroute, struct list_elem *list_head)
 {
-    __u32 counter = 0;
+    net_index counter = 0;
 
     for (struct list_elem *elem = list_head; elem != NULL; elem = elem->next) {
 
-        if (bpf_map__update_elem(traceroute->maps.map_allowed_sources, &counter, sizeof(counter), &elem->addr, sizeof(elem->addr), 0) < 0) {
+        if (bpf_map__update_elem(traceroute->maps.map_allowed_sources, &counter, sizeof(counter),
+                &elem->entry.address, sizeof(elem->entry.address), 0) < 0) {
             fprintf(stderr, "Failed to insert network into the map of allowed sources!\n");
             return -1;
         }

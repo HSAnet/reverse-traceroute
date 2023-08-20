@@ -1,5 +1,5 @@
-#ifndef ERROR_H
-#define ERROR_H
+#ifndef BPF_ERROR_H
+#define BPF_ERROR_H
 
 typedef enum {
     ERR_NONE = 0x00,

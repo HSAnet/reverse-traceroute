@@ -1,15 +1,13 @@
-#ifndef IP_GENERIC_H
-#define IP_GENERIC_H
+#ifndef BPF_IP_GENERIC_H
+#define BPF_IP_GENERIC_H
 
+#include "../ipaddr.h"
 #include <linux/in.h>
 #include <linux/icmp.h>
 #include <linux/if_ether.h>
 
 #if defined(TRACEROUTE_V4)
-
-#include <linux/ip.h>
 typedef struct iphdr iphdr_t;
-typedef __be32 ipaddr_t;
 
 #define G_ETH_P_IP             ETH_P_IP
 #define G_PROTO_ICMP           IPPROTO_ICMP
@@ -30,10 +28,7 @@ typedef __be32 ipaddr_t;
     }
 
 #elif defined(TRACEROUTE_V6)
-
-#include <linux/ipv6.h>
 typedef struct ipv6hdr iphdr_t;
-typedef struct in6_addr ipaddr_t;
 
 #include <linux/icmpv6.h>
 #define G_ETH_P_IP             ETH_P_IPV6
@@ -51,9 +46,6 @@ typedef struct in6_addr ipaddr_t;
 #define G_IP_CSUM_COMPUTE(x)                                                   \
     {                                                                          \
     }
-
-#else
-#error "No address family defined. Specify TRACEROUTE_V4|TRACEROUTE_V6."
 #endif
 
 #endif

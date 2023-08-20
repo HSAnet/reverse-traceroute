@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef SWAP_ADDR_H
-#define SWAP_ADDR_H
+#ifndef BPF_SWAP_ADDR_H
+#define BPF_SWAP_ADDR_H
 
 #include "internal.h"
 #include "ip_generic.h"

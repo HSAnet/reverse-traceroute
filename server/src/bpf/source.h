@@ -1,5 +1,5 @@
-#ifndef IP_MATCH_H
-#define IP_MATCH_H
+#ifndef BPF_SOURCE_H
+#define BPF_SOURCE_H
 
 #include "internal.h"
 #include "ip_generic.h"

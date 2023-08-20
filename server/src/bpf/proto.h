@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef PROTO_H
-#define PROTO_H
+#ifndef BPF_PROTO_H
+#define BPF_PROTO_H
 
 #include <linux/ipv6.h>
 #include <linux/types.h>

@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef PROBE_H
-#define PROBE_H
+#ifndef BPF_PROBE_H
+#define BPF_PROBE_H
 
 #include "internal.h"
 #include "ip_generic.h"

@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef CURSOR_H
-#define CURSOR_H
+#ifndef BPF_CURSOR_H
+#define BPF_CURSOR_H
 
 #include "internal.h"
 #include "ip_generic.h"

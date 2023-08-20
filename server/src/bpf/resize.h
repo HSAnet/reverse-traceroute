@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef RESIZE_H
-#define RESIZE_H
+#ifndef BPF_RESIZE_H
+#define BPF_RESIZE_H
 
 #include "internal.h"
 #include "ip_generic.h"

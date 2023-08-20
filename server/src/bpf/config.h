@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef BPF_CONFIG_H
+#define BPF_CONFIG_H
 
 #include <linux/types.h>
 #include <stdbool.h>

@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef INTERNAL_H
-#define INTERNAL_H
+#ifndef BPF_INTERNAL_H
+#define BPF_INTERNAL_H
 
 #include <linux/types.h>
 #include <bpf/bpf_helpers.h>

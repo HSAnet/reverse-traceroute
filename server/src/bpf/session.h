@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef SESSION_H
-#define SESSION_H
+#ifndef BPF_SESSION_H
+#define BPF_SESSION_H
 
 #include "internal.h"
 #include "ip_generic.h"
