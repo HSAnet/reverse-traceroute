@@ -219,7 +219,7 @@ static int find_allowed_sources(struct traceroute *traceroute, const char *sourc
         free(original_line);
         continue;
 err_loop:
-        fprintf(stderr, "'%s' is not a valid CIDR network! Skipping!\n", original_line);
+        fprintf(stderr, "'%s' is not a valid CIDR network, skipping.\n", original_line);
         free(original_line);
     }
     fclose(sources);
@@ -249,10 +249,11 @@ static int update_allowed_sources(struct traceroute *traceroute, struct list_ele
     for (struct list_elem *elem = list_head; elem != NULL; elem = elem->next) {
 
         if (bpf_map__update_elem(traceroute->maps.map_allowed_sources, &counter, sizeof(counter),
-                &elem->entry.address, sizeof(elem->entry.address), 0) < 0) {
+                &elem->entry, sizeof(elem->entry), 0) < 0) {
             fprintf(stderr, "Failed to insert network into the map of allowed sources!\n");
             return -1;
         }
+
         counter += 1;
     }
     return 0;
