@@ -20,12 +20,31 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #ifndef BPF_SWAP_ADDR_H
 #define BPF_SWAP_ADDR_H
 
-#include "internal.h"
 #include "ip_generic.h"
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
+#include <linux/types.h>
 
-INTERNAL void swap_addr_ethhdr(struct ethhdr *ethhdr);
-INTERNAL void swap_addr_iphdr(iphdr_t *iphdr, const ipaddr_t *target);
-INTERNAL void swap_addr(struct ethhdr *eth, iphdr_t *ip,
-                        const ipaddr_t *target);
+static __inline void swap_addr_ethhdr(struct ethhdr *ethhdr)
+{
+    for (int i = 0; i < ETH_ALEN; i++) {
+        __u8 byte = ethhdr->h_dest[i];
+        ethhdr->h_dest[i] = ethhdr->h_source[i];
+        ethhdr->h_source[i] = byte;
+    }
+}
 
+static __inline void swap_addr_iphdr(iphdr_t *iphdr, const ipaddr_t *target)
+{
+    const ipaddr_t tmp_ip = (target == NULL) ? iphdr->saddr : *target;
+    iphdr->saddr = iphdr->daddr;
+    iphdr->daddr = tmp_ip;
+}
+
+static __inline void swap_addr(struct ethhdr *eth, iphdr_t *ip, const ipaddr_t *target)
+{
+    swap_addr_ethhdr(eth);
+    swap_addr_iphdr(ip, target);
+}
 #endif
