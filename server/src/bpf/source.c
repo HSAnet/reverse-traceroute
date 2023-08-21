@@ -28,8 +28,6 @@ static int match_subnet(void *map, const void *key, const void *value, void *con
     ctx->match_found = 0;
 
     for (int i = 0; i < sizeof(ipaddr_t) / sizeof(__be32); i++) {
-        if (netmask_chunk[i] == 0)
-            break;
         if ((source_chunk[i] & netmask_chunk[i]) != netaddr_chunk[i])
             return 0;
     }

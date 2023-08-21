@@ -148,24 +148,26 @@ struct list_elem {
 
 static int create_netmask(const ipaddr_t address, __u8 prefixlen, ipaddr_t *netmask)
 {
+    if (prefixlen > sizeof(ipaddr_t) * 8)
+        return -1;
+
+    const __u8 nchunks = sizeof(ipaddr_t) / sizeof(__be32);
     __be32 *addr_chunk = (__be32 *) &address;
     __be32 *mask_chunk = (__be32 *) netmask;
 
-    for (int i = 0; i < sizeof(address) / sizeof(*addr_chunk); i++) {
-        if (prefixlen == 0)
-            break;
+    int index = prefixlen / 32;
+    int value = prefixlen % 32;
 
-        __be32 mask = htonl((__u32)0xffffffff << (32 - prefixlen));
+    mask_chunk[index] = htonl((__u64)0xffffffff << (32 - value));
+    for (int i = 0; i < index; i++)
+        mask_chunk[i] = 0xffffffff;
+    for (int i = index + 1; i < nchunks; i++)
+        mask_chunk[i] = 0;
 
-        // Validate that no hostbits are set
-        if (addr_chunk[i] != (addr_chunk[i] & mask))
+    // Validate that no host bits are set for the network address
+    for (int i = index; i < nchunks; i++)
+        if ((addr_chunk[i] & mask_chunk[i]) != addr_chunk[i])
             return -1;
-
-        mask_chunk[i] = mask; 
-        
-        if (prefixlen < 32) break;
-        prefixlen -= 32;
-    }
 
     return 0;
 }
@@ -198,14 +200,14 @@ static int find_allowed_sources(struct traceroute *traceroute, const char *sourc
 
         char *endptr;
         unsigned long prefixlen = strtoul(prefixlen_start, &endptr, 0);
-        if (*endptr != '\0' || endptr == prefixlen_start || prefixlen > sizeof(ipaddr_t) * 8)
+        if (*endptr != '\0' || endptr == prefixlen_start)
             goto err_loop;
 
         if (inet_pton(ADDR_FAMILY, address_start, &addr) == 0)
             goto err_loop;
 
         ipaddr_t netmask;
-        if (create_netmask(addr, prefixlen, &netmask) == 0)
+        if (create_netmask(addr, prefixlen, &netmask) < 0)
             goto err_loop;
 
         struct list_elem *new_elem = malloc(sizeof(*list_head));
@@ -320,7 +322,8 @@ err:
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
                            va_list args)
 {
-    return vfprintf(stderr, format, args);
+    //return vfprintf(stderr, format, args);
+    return 0;
 }
 
 static int log_message(void *ctx, void *data, size_t size)
