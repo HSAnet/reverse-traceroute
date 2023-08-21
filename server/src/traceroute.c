@@ -60,25 +60,28 @@ struct args {
 };
 
 const char *fmt_help_message =
-    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--[no-]indirect] [--[no-]tcp-syn-probes] [--allow-sources-from FILENAME] ifname\n"
+    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--[no-]indirect] "
+    "[--[no-]tcp-syn-probes] [--allow-sources-from FILENAME] ifname\n"
     "\t-t: The time after which a session expires, in nanoseconds.\n"
     "\t-n: The maximum number of sessions the server can handle.\n"
-    "\t--[no-]indirect: Whether or not the client is allowed to choose the trace target.\n"
-    "\t--[no-]tcp-syn-probes: Whether or not TCP probes are sent with the SYN flag set.\n"
-    "\t--allow-sources-from: The filename that contains valid subnets sources in CIDR notation.\n";
+    "\t--[no-]indirect: Whether or not the client is allowed to choose the "
+    "trace target.\n"
+    "\t--[no-]tcp-syn-probes: Whether or not TCP probes are sent with the SYN "
+    "flag set.\n"
+    "\t--allow-sources-from: The filename that contains valid subnets sources "
+    "in CIDR notation.\n";
 
 static int parse_args(int argc, char **argv, struct args *args)
 {
     memset(args, 0, sizeof(*args));
 
     struct option long_opts[] = {
-        {"indirect", no_argument, &args->indirect_enabled, 1}, 
-        {"no-indirect", no_argument, &args->indirect_disabled, 1}, 
-        {"tcp-syn-probes", no_argument, &args->tcp_syn_enabled, 1}, 
-        {"no-tcp-syn-probes", no_argument, &args->tcp_syn_disabled, 1}, 
+        {"indirect", no_argument, &args->indirect_enabled, 1},
+        {"no-indirect", no_argument, &args->indirect_disabled, 1},
+        {"tcp-syn-probes", no_argument, &args->tcp_syn_enabled, 1},
+        {"no-tcp-syn-probes", no_argument, &args->tcp_syn_disabled, 1},
         {"allow-sources-from", required_argument, 0, 's'},
-        {0, 0, 0, 0}
-    };
+        {0, 0, 0, 0}};
 
     char *endptr;
     int option_id, option_index = 0;
@@ -114,11 +117,13 @@ static int parse_args(int argc, char **argv, struct args *args)
     }
 
     if (args->indirect_disabled && args->indirect_enabled) {
-        fprintf(stderr, "The '--indirect' and '--no-indirect' flags are mutually exclusive!\n");
+        fprintf(stderr, "The '--indirect' and '--no-indirect' flags are "
+                        "mutually exclusive!\n");
         goto help;
     }
     if (args->tcp_syn_disabled && args->tcp_syn_enabled) {
-        fprintf(stderr, "The '--tcp-syn-probes' and '--no-tcp-syn-probes' flags are mutually exclusive!\n");
+        fprintf(stderr, "The '--tcp-syn-probes' and '--no-tcp-syn-probes' "
+                        "flags are mutually exclusive!\n");
         goto help;
     }
 
@@ -146,14 +151,15 @@ struct list_elem {
     struct list_elem *next;
 };
 
-static int create_netmask(const ipaddr_t address, __u8 prefixlen, ipaddr_t *netmask)
+static int create_netmask(const ipaddr_t address, __u8 prefixlen,
+                          ipaddr_t *netmask)
 {
     if (prefixlen > sizeof(ipaddr_t) * 8)
-        return -1;
+        return -2;
 
     const __u8 nchunks = sizeof(ipaddr_t) / sizeof(__be32);
-    __be32 *addr_chunk = (__be32 *) &address;
-    __be32 *mask_chunk = (__be32 *) netmask;
+    __be32 *addr_chunk = (__be32 *)&address;
+    __be32 *mask_chunk = (__be32 *)netmask;
 
     int index = prefixlen / 32;
     int value = prefixlen % 32;
@@ -172,43 +178,74 @@ static int create_netmask(const ipaddr_t address, __u8 prefixlen, ipaddr_t *netm
     return 0;
 }
 
-static int find_allowed_sources(struct traceroute *traceroute, const char *sources_filename, struct list_elem **head)
-{        
+static int find_allowed_sources(struct traceroute *traceroute,
+                                const char *sources_filename,
+                                struct list_elem **head)
+{
     struct list_elem *list_head = NULL;
-    size_t list_len = 0;
+    size_t list_len = 0, nentries = 0, nlines = 0;
 
     FILE *sources = fopen(sources_filename, "r");
     if (!sources) {
         fprintf(stderr, "Failed to open '%s'!\n", sources_filename);
         return -1;
     }
+    fprintf(stderr, "Attempting to read network entries from '%s'\n",
+            sources_filename);
 
-    char *line = NULL; size_t line_size = 0;
+    char *line = NULL;
+    size_t line_size = 0;
     ssize_t nread;
     errno = 0;
     while ((nread = getline(&line, &line_size, sources)) > 0) {
+        nlines += 1;
         // Replace newline with string-terminator
         ipaddr_t addr;
-        line[nread-1] = '\0';
+        line[nread - 1] = '\0';
+
+        // Ignore empty lines and comments
+        if (*line == '\0' || *line == '#')
+            continue;
+
+        nentries += 1;
         char *original_line = strdup(line);
 
-        char *address_start = strtok(line, "/");;
+#define PARSE_ERROR(error)                                                     \
+    fprintf(stderr, "Line %ld: '%s': %s\n", nlines, original_line, (error))
+
+        char *address_start = strtok(line, "/");
         char *prefixlen_start = strtok(NULL, "/");
 
-        if (!prefixlen_start)
+        if (!prefixlen_start) {
+            PARSE_ERROR("expected a network in CIDR notation");
             goto err_loop;
+        }
 
         char *endptr;
         unsigned long prefixlen = strtoul(prefixlen_start, &endptr, 0);
-        if (*endptr != '\0' || endptr == prefixlen_start)
+        if (*endptr != '\0' || endptr == prefixlen_start) {
+            PARSE_ERROR("invalid prefix length");
             goto err_loop;
+        }
 
-        if (inet_pton(ADDR_FAMILY, address_start, &addr) == 0)
+        if (inet_pton(ADDR_FAMILY, address_start, &addr) == 0) {
+            PARSE_ERROR("invalid address format");
             goto err_loop;
+        }
 
         ipaddr_t netmask;
-        if (create_netmask(addr, prefixlen, &netmask) < 0)
+        switch (create_netmask(addr, prefixlen, &netmask)) {
+        case 0:
+            break;
+        case -1:
+            PARSE_ERROR("host bits are set");
             goto err_loop;
+        case -2:
+            PARSE_ERROR("prefix length outside of bounds");
+            goto err_loop;
+        default:
+            goto err_loop;
+        }
 
         struct list_elem *new_elem = malloc(sizeof(*list_head));
         new_elem->entry.address = addr;
@@ -218,10 +255,8 @@ static int find_allowed_sources(struct traceroute *traceroute, const char *sourc
         list_head = new_elem;
         list_len += 1;
 
-        free(original_line);
-        continue;
-err_loop:
-        fprintf(stderr, "'%s' is not a valid CIDR network, skipping.\n", original_line);
+    err_loop:
+#undef PARSE_ERROR
         free(original_line);
     }
     fclose(sources);
@@ -231,28 +266,41 @@ err_loop:
         return -1;
     }
 
-    if (list_len == 0) {
-        fprintf(stderr, "No valid network entries found in '%s'!\n", sources_filename);
+    if (nentries == 0) {
+        fprintf(stderr, "No network entries found in '%s'\n", sources_filename);
         return -1;
     }
-    if (bpf_map__set_max_entries(traceroute->maps.map_allowed_sources, list_len) < 0) {
-        fprintf(stderr, "Failed to set maximum number of allowed networks to %zu!\n", list_len);
+    if (list_len != nentries) {
+        fprintf(stderr, "Errors encountered while parsing '%s'\n",
+                sources_filename);
+        return -1;
+    }
+    if (bpf_map__set_max_entries(traceroute->maps.map_allowed_sources,
+                                 list_len) < 0) {
+        fprintf(stderr,
+                "Failed to set maximum number of allowed networks to %zu!\n",
+                list_len);
         return -1;
     }
 
+    fprintf(stderr, "Loaded %ld network entries from '%s'\n", list_len,
+            sources_filename);
     *head = list_head;
     return 0;
 }
 
-static int update_allowed_sources(struct traceroute *traceroute, struct list_elem *list_head)
+static int update_allowed_sources(struct traceroute *traceroute,
+                                  struct list_elem *list_head)
 {
     net_index counter = 0;
 
     for (struct list_elem *elem = list_head; elem != NULL; elem = elem->next) {
-
-        if (bpf_map__update_elem(traceroute->maps.map_allowed_sources, &counter, sizeof(counter),
-                &elem->entry, sizeof(elem->entry), 0) < 0) {
-            fprintf(stderr, "Failed to insert network into the map of allowed sources!\n");
+        if (bpf_map__update_elem(traceroute->maps.map_allowed_sources, &counter,
+                                 sizeof(counter), &elem->entry,
+                                 sizeof(elem->entry), 0) < 0) {
+            fprintf(
+                stderr,
+                "Failed to insert network into the map of allowed sources!\n");
             return -1;
         }
 
@@ -294,7 +342,8 @@ static struct traceroute *traceroute_init(const struct args *args)
 
     struct list_elem *list_head = NULL;
     if (args->allowed_sources_filename) {
-        if (find_allowed_sources(traceroute, args->allowed_sources_filename, &list_head) < 0)
+        if (find_allowed_sources(traceroute, args->allowed_sources_filename,
+                                 &list_head) < 0)
             goto cleanup;
     }
 
@@ -322,7 +371,8 @@ err:
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
                            va_list args)
 {
-    //return vfprintf(stderr, format, args);
+    if (level == LIBBPF_WARN || level == LIBBPF_INFO)
+        return vfprintf(stderr, format, args);
     return 0;
 }
 
