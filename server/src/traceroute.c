@@ -56,20 +56,25 @@ struct args {
     __u64 timeout_ns;
     __u32 max_elem;
 
-    char *allowed_sources_filename;
+    char *sources_filename;
+    char *indirect_sources_filename;
 };
 
 const char *fmt_help_message =
-    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--[no-]indirect] "
-    "[--[no-]tcp-syn-probes] [--allow-sources-from FILENAME] ifname\n"
+    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--[no-]indirect]\n"
+    "\t\t[--[no-]tcp-syn-probes] [--sources-from FILENAME]\n"
+    "\t\t[--indirect-sources-from FILENAME] ifname\n"
+    "\n"
     "\t-t: The time after which a session expires, in nanoseconds.\n"
     "\t-n: The maximum number of sessions the server can handle.\n"
     "\t--[no-]indirect: Whether or not the client is allowed to choose the "
     "trace target.\n"
     "\t--[no-]tcp-syn-probes: Whether or not TCP probes are sent with the SYN "
     "flag set.\n"
-    "\t--allow-sources-from: The filename that contains valid subnets sources "
-    "in CIDR notation.\n";
+    "\t--sources-from: The filename that contains allowed networks in CIDR "
+    "notation for traceroute requests\n"
+    "\t--indirect-sources-from: The filename that contains allowed networks in "
+    "CIDR notation for indirect traceroute requests\n";
 
 static int parse_args(int argc, char **argv, struct args *args)
 {
@@ -80,7 +85,8 @@ static int parse_args(int argc, char **argv, struct args *args)
         {"no-indirect", no_argument, &args->indirect_disabled, 1},
         {"tcp-syn-probes", no_argument, &args->tcp_syn_enabled, 1},
         {"no-tcp-syn-probes", no_argument, &args->tcp_syn_disabled, 1},
-        {"allow-sources-from", required_argument, 0, 's'},
+        {"sources-from", required_argument, 0, 's'},
+        {"indirect-sources-from", required_argument, 0, 'i'},
         {0, 0, 0, 0}};
 
     char *endptr;
@@ -93,7 +99,11 @@ static int parse_args(int argc, char **argv, struct args *args)
             continue;
         // Allowed sources filename
         case 's':
-            args->allowed_sources_filename = strdup(optarg);
+            args->sources_filename = strdup(optarg);
+            break;
+        // Allowed indirect sources filename
+        case 'i':
+            args->indirect_sources_filename = strdup(optarg);
             break;
         // Timeout
         case 't':
@@ -178,9 +188,8 @@ static int create_netmask(const ipaddr_t address, __u8 prefixlen,
     return 0;
 }
 
-static int find_allowed_sources(struct traceroute *traceroute,
-                                const char *sources_filename,
-                                struct list_elem **head)
+static ssize_t parse_networks(const char *sources_filename,
+                              struct list_elem **head)
 {
     struct list_elem *list_head = NULL;
     size_t list_len = 0, nentries = 0, nlines = 0;
@@ -188,7 +197,7 @@ static int find_allowed_sources(struct traceroute *traceroute,
     FILE *sources = fopen(sources_filename, "r");
     if (!sources) {
         fprintf(stderr, "Failed to open '%s'!\n", sources_filename);
-        return -1;
+        return 0;
     }
     fprintf(stderr, "Attempting to read network entries from '%s'\n",
             sources_filename);
@@ -263,50 +272,46 @@ static int find_allowed_sources(struct traceroute *traceroute,
     free(line);
     if (errno) {
         perror("getline: ");
-        return -1;
+        return 0;
     }
 
     if (nentries == 0) {
         fprintf(stderr, "No network entries found in '%s'\n", sources_filename);
-        return -1;
+        return 0;
     }
     if (list_len != nentries) {
         fprintf(stderr, "Errors encountered while parsing '%s'\n",
                 sources_filename);
-        return -1;
-    }
-    if (bpf_map__set_max_entries(traceroute->maps.map_allowed_sources,
-                                 list_len) < 0) {
-        fprintf(stderr,
-                "Failed to set maximum number of allowed networks to %zu!\n",
-                list_len);
-        return -1;
+        return 0;
     }
 
     fprintf(stderr, "Loaded %ld network entries from '%s'\n", list_len,
             sources_filename);
     *head = list_head;
-    return 0;
+    return nentries;
 }
 
-static int update_allowed_sources(struct traceroute *traceroute,
-                                  struct list_elem *list_head)
+static int update_networks(struct bpf_map *map, struct list_elem *list_head)
 {
     net_index counter = 0;
 
     for (struct list_elem *elem = list_head; elem != NULL; elem = elem->next) {
-        if (bpf_map__update_elem(traceroute->maps.map_allowed_sources, &counter,
-                                 sizeof(counter), &elem->entry,
-                                 sizeof(elem->entry), 0) < 0) {
-            fprintf(
-                stderr,
-                "Failed to insert network into the map of allowed sources!\n");
+        if (bpf_map__update_elem(map, &counter, sizeof(counter), &elem->entry,
+                                 sizeof(elem->entry), 0) < 0)
             return -1;
-        }
 
         counter += 1;
     }
     return 0;
+}
+
+static void free_networks(struct list_elem *head)
+{
+    while (head) {
+        struct list_elem *elem = head;
+        head = head->next;
+        free(elem);
+    }
 }
 
 static struct traceroute *traceroute_init(const struct args *args)
@@ -315,7 +320,7 @@ static struct traceroute *traceroute_init(const struct args *args)
 
     if (!traceroute) {
         fprintf(stderr, "Failed to open the eBPF program!\n");
-        goto err;
+        return NULL;
     }
 
     if (args->indirect_enabled)
@@ -332,39 +337,73 @@ static struct traceroute *traceroute_init(const struct args *args)
         traceroute->rodata->CONFIG_TIMEOUT_NS = args->timeout_ns;
 
     if (args->max_elem) {
-        if (bpf_map__set_max_entries(traceroute->maps.map_sessions,
+        if (bpf_map__set_max_entries(traceroute->maps.sessions,
                                      args->max_elem) < 0) {
             fprintf(stderr, "Failed to set maximum number of sessions to %u!\n",
                     args->max_elem);
-            goto cleanup;
+            goto err;
         }
     }
 
-    struct list_elem *list_head = NULL;
-    if (args->allowed_sources_filename) {
-        if (find_allowed_sources(traceroute, args->allowed_sources_filename,
-                                 &list_head) < 0)
-            goto cleanup;
+    struct list_elem *sources = NULL;
+    size_t sources_len;
+    if (args->sources_filename) {
+        sources_len = parse_networks(args->sources_filename, &sources);
+        if (sources_len == 0)
+            goto err;
+        if (bpf_map__set_max_entries(traceroute->maps.allowed_sources,
+                                     sources_len) < 0) {
+            fprintf(
+                stderr,
+                "Failed to set maximum number of allowed networks to %zu!\n",
+                sources_len);
+            goto err;
+        }
+    }
+
+    struct list_elem *indirect_sources = NULL;
+    size_t indirect_sources_len;
+    if (args->indirect_sources_filename) {
+        if (traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED) {
+            indirect_sources_len = parse_networks(
+                args->indirect_sources_filename, &indirect_sources);
+            if (indirect_sources_len == 0)
+                goto err;
+            if (bpf_map__set_max_entries(
+                    traceroute->maps.allowed_sources_multipart,
+                    indirect_sources_len) < 0) {
+                fprintf(stderr,
+                        "Failed to set maximum number of allowed networks for "
+                        "indirect requests to %zu!\n",
+                        indirect_sources_len);
+                goto err;
+            }
+        } else {
+            fprintf(stderr, "Indirect tracing is disabled, ignoring the "
+                            "'--indirect-sources-from' argument\n");
+        }
     }
 
     if (traceroute__load(traceroute) < 0) {
         fprintf(stderr, "Failed to load the program!\n");
-        goto cleanup;
+        goto err;
     }
 
-    if (list_head && update_allowed_sources(traceroute, list_head) < 0)
-        goto cleanup;
-
-    while (list_head) {
-        struct list_elem *elem = list_head;
-        list_head = list_head->next;
-        free(elem);
+    if (sources) {
+        if (update_networks(traceroute->maps.allowed_sources, sources) < 0)
+            goto err;
+        free_networks(sources);
+    }
+    if (indirect_sources) {
+        if (update_networks(traceroute->maps.allowed_sources_multipart,
+                            indirect_sources) < 0)
+            goto err;
+        free_networks(indirect_sources);
     }
 
     return traceroute;
-cleanup:
-    traceroute__destroy(traceroute);
 err:
+    traceroute__destroy(traceroute);
     return NULL;
 }
 
@@ -448,7 +487,7 @@ int main(int argc, char **argv)
     fprintf(stderr, "\n\nSession timeout in nanoseconds: %llu\n",
             tr->rodata->CONFIG_TIMEOUT_NS);
     fprintf(stderr, "Maximum session entries: %u\n",
-            bpf_map__max_entries(tr->maps.map_sessions));
+            bpf_map__max_entries(tr->maps.sessions));
     fprintf(stderr, "Indirect trace enabled: %s\n",
             tr->rodata->CONFIG_INDIRECT_TRACE_ENABLED ? "yes" : "no");
     fprintf(stderr, "TCP SYN probes enabled: %s\n\n\n",

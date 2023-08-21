@@ -8,7 +8,14 @@ struct {
     __uint(max_entries, 1);
     __type(key, net_index);
     __type(value, struct net_entry);
-} map_allowed_sources SEC(".maps");
+} allowed_sources SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, net_index);
+    __type(value, struct net_entry);
+} allowed_sources_multipart SEC(".maps");
 
 
 struct match_context {
@@ -36,7 +43,7 @@ static int match_subnet(void *map, const void *key, const void *value, void *con
     return 1;
 }
 
-INTERNAL int source_allowed(const ipaddr_t *address)
+static int match_subnet_in(void *map, const ipaddr_t *address)
 {
     struct match_context ctx = {
         .addr = (ipaddr_t *)address,
@@ -44,8 +51,18 @@ INTERNAL int source_allowed(const ipaddr_t *address)
     // In case the allowed sources map is not updated by the loader only a single
     // entry exists, which is initialized to zero by default.
     // Thus, it is equivalent to the 0.0.0.0/0 network, which matches all addresses.
-    bpf_for_each_map_elem(&map_allowed_sources, match_subnet, &ctx, 0);
+    bpf_for_each_map_elem(map, match_subnet, &ctx, 0);
     if (ctx.match_found)
         return 0;
     return -1;
+}
+
+INTERNAL int source_allowed(const ipaddr_t *address)
+{
+    return match_subnet_in(&allowed_sources, address);
+}
+
+INTERNAL int source_allowed_multipart(const ipaddr_t *address)
+{
+    return match_subnet_in(&allowed_sources_multipart, address);
 }

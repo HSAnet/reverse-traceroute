@@ -38,7 +38,7 @@ struct {
     __uint(max_entries, DEFAULT_MAX_ELEM);
     __type(key, struct session_key);
     __type(value, struct __session_state);
-} map_sessions SEC(".maps");
+} sessions SEC(".maps");
 
 static int session_timeout_callback(void *map, const struct session_key *key,
                                     struct __session_state *state)
@@ -50,13 +50,13 @@ static int session_timeout_callback(void *map, const struct session_key *key,
 
 static struct __session_state *__session_find(const struct session_key *key)
 {
-    return bpf_map_lookup_elem(&map_sessions, key);
+    return bpf_map_lookup_elem(&sessions, key);
 }
 
 INTERNAL int session_delete(const struct session_key *session)
 {
     log_message(SESSION_DELETED, session);
-    return bpf_map_delete_elem(&map_sessions, session);
+    return bpf_map_delete_elem(&sessions, session);
 }
 
 INTERNAL struct session_state *session_find(const struct session_key *key)
@@ -74,7 +74,7 @@ INTERNAL int session_add(const struct session_key *session,
     int ret;
     struct __session_state __state = {.state = *state}, *state_ptr;
 
-    ret = bpf_map_update_elem(&map_sessions, session, &__state, BPF_NOEXIST);
+    ret = bpf_map_update_elem(&sessions, session, &__state, BPF_NOEXIST);
     if (ret) {
         switch (ret) {
         case -EEXIST:
@@ -91,7 +91,7 @@ INTERNAL int session_add(const struct session_key *session,
     if (!state_ptr)
         goto err;
 
-    if (bpf_timer_init(&state_ptr->timer, &map_sessions, CLOCK_MONOTONIC) < 0)
+    if (bpf_timer_init(&state_ptr->timer, &sessions, CLOCK_MONOTONIC) < 0)
         goto err;
     if (bpf_timer_set_callback(&state_ptr->timer, session_timeout_callback) < 0)
         goto err;

@@ -54,24 +54,23 @@ static int parse_mp_hdr(struct cursor *cursor)
 static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
                                 iphdr_t **ip, struct icmphdr **icmp)
 {
-    if (source_allowed(&((**ip).saddr)) < 0)
+    ipaddr_t origin = (**ip).saddr;
+    if (source_allowed(&origin) < 0)
+        return TC_ACT_SHOT;
+
+    union trhdr *tr;
+    if (PARSE(cursor, &tr) < 0)
         return TC_ACT_SHOT;
 
     // Set on error condition
     struct response_err_args err_args = {.padding = 0, .error = 0, .value = 0};
-    union trhdr *tr;
-
     __be16 session_id = (*icmp)->un.echo.id;
-    ipaddr_t origin = (**ip).saddr;
-
-    // Initial target is the tr-requests origin, may be overwritten by
-    // multipart.
     ipaddr_t target = origin;
 
-    if (PARSE(cursor, &tr) < 0)
-        return TC_ACT_SHOT;
-
     if (parse_mp_hdr(cursor) == 0) {
+        if (source_allowed_multipart(&origin) < 0)
+            return TC_ACT_SHOT;
+
         struct icmp_extobj_hdr *obj;
         if (PARSE(cursor, &obj) < 0)
             return TC_ACT_SHOT;
@@ -115,12 +114,6 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
     }
 
 error:;
-    // TODO: response_create should not rely on state, as tstamp is not always
-    // needed
-    // -> Refactor in error and not err with common args: session_id,
-    // origin_addr
-    //  err-args: err, err_value
-    //  regular: timestamp
     struct response_args resp_args = {
         .session_id = session_id,
         .origin = origin,
