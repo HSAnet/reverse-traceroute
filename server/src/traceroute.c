@@ -188,6 +188,15 @@ static int create_netmask(const ipaddr_t address, __u8 prefixlen,
     return 0;
 }
 
+static void free_networks(struct list_elem *head)
+{
+    while (head) {
+        struct list_elem *elem = head;
+        head = head->next;
+        free(elem);
+    }
+}
+
 static ssize_t parse_networks(const char *sources_filename,
                               struct list_elem **head)
 {
@@ -268,27 +277,32 @@ static ssize_t parse_networks(const char *sources_filename,
 #undef PARSE_ERROR
         free(original_line);
     }
-    fclose(sources);
+
     free(line);
+    fclose(sources);
+
     if (errno) {
         perror("getline: ");
-        return 0;
+        goto cleanup;
     }
 
     if (nentries == 0) {
         fprintf(stderr, "No network entries found in '%s'\n", sources_filename);
-        return 0;
+        goto cleanup;
     }
     if (list_len != nentries) {
         fprintf(stderr, "Errors encountered while parsing '%s'\n",
                 sources_filename);
-        return 0;
+        goto cleanup;
     }
 
     fprintf(stderr, "Loaded %ld network entries from '%s'\n", list_len,
             sources_filename);
     *head = list_head;
     return nentries;
+cleanup:
+    free_networks(list_head);
+    return 0;
 }
 
 static int update_networks(struct bpf_map *map, struct list_elem *list_head)
@@ -305,14 +319,6 @@ static int update_networks(struct bpf_map *map, struct list_elem *list_head)
     return 0;
 }
 
-static void free_networks(struct list_elem *head)
-{
-    while (head) {
-        struct list_elem *elem = head;
-        head = head->next;
-        free(elem);
-    }
-}
 
 static struct traceroute *traceroute_init(const struct args *args)
 {
@@ -357,7 +363,7 @@ static struct traceroute *traceroute_init(const struct args *args)
                 stderr,
                 "Failed to set maximum number of allowed networks to %zu!\n",
                 sources_len);
-            goto err;
+            goto free_src;
         }
     }
 
@@ -376,7 +382,7 @@ static struct traceroute *traceroute_init(const struct args *args)
                         "Failed to set maximum number of allowed networks for "
                         "indirect requests to %zu!\n",
                         indirect_sources_len);
-                goto err;
+                goto free_ind;
             }
         } else {
             fprintf(stderr, "Indirect tracing is disabled, ignoring the "
@@ -386,22 +392,27 @@ static struct traceroute *traceroute_init(const struct args *args)
 
     if (traceroute__load(traceroute) < 0) {
         fprintf(stderr, "Failed to load the program!\n");
-        goto err;
+        goto free_ind;
     }
 
     if (sources) {
         if (update_networks(traceroute->maps.allowed_sources, sources) < 0)
-            goto err;
-        free_networks(sources);
+            goto free_ind;
     }
     if (indirect_sources) {
         if (update_networks(traceroute->maps.allowed_sources_multipart,
                             indirect_sources) < 0)
-            goto err;
-        free_networks(indirect_sources);
+            goto free_ind;
     }
 
+    free_networks(sources);
+    free_networks(indirect_sources);
     return traceroute;
+
+free_ind:
+    free_networks(indirect_sources);
+free_src:
+    free_networks(sources);
 err:
     traceroute__destroy(traceroute);
     return NULL;
