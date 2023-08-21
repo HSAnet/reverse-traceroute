@@ -26,7 +26,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/ipv6.h>
 #include <linux/types.h>
 
-static __inline void swap_addr_ethhdr(struct ethhdr *ethhdr)
+static inline void swap_addr_ethhdr(struct ethhdr *ethhdr)
 {
     for (int i = 0; i < ETH_ALEN; i++) {
         __u8 byte = ethhdr->h_dest[i];
@@ -35,14 +35,14 @@ static __inline void swap_addr_ethhdr(struct ethhdr *ethhdr)
     }
 }
 
-static __inline void swap_addr_iphdr(iphdr_t *iphdr, const ipaddr_t *target)
+static inline void swap_addr_iphdr(iphdr_t *iphdr, const ipaddr_t *target)
 {
     const ipaddr_t tmp_ip = (target == NULL) ? iphdr->saddr : *target;
     iphdr->saddr = iphdr->daddr;
     iphdr->daddr = tmp_ip;
 }
 
-static __inline void swap_addr(struct ethhdr *eth, iphdr_t *ip, const ipaddr_t *target)
+static inline void swap_addr(struct ethhdr *eth, iphdr_t *ip, const ipaddr_t *target)
 {
     swap_addr_ethhdr(eth);
     swap_addr_iphdr(ip, target);

@@ -34,7 +34,7 @@ struct ethhdr;
  * Resizes the packet to be able to hold the specified length on top of the IP
  * header, all options are truncated.
  */
-static __inline int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
+static inline int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
                           struct ethhdr **eth, iphdr_t **ip)
 {
     int ret = bpf_skb_change_tail(cursor->skb,

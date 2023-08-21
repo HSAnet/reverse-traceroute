@@ -25,7 +25,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <bpf/bpf_endian.h>
 
 // Computes the checksum. See RFC1071 for details.
-static __inline __sum16 csum(const void *cursor, __u16 len, __be32 seed)
+static inline __sum16 csum(const void *cursor, __u16 len, __be32 seed)
 {
     __be32 sum = seed;
     const __be16 *pos = cursor;
@@ -45,7 +45,7 @@ static __inline __sum16 csum(const void *cursor, __u16 len, __be32 seed)
     return (__sum16)~sum;
 }
 
-static __inline __be32 pseudo_header(const iphdr_t *ip, __u16 probe_len, __u8 protocol)
+static inline __be32 pseudo_header(const iphdr_t *ip, __u16 probe_len, __u8 protocol)
 {
     __be32 pseudo_hdr = bpf_htons(probe_len);
 
