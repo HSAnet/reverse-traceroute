@@ -187,8 +187,13 @@ which are maintained inside the `ENDPOINTS` file.
 ## Disclaimer
 Both the client and the server are subject to change, as they are still early in development.
 As such, you may encounter bugs.  
+
 Reverse traceroute employs code points that are not yet assigned by IANA,
-namely _ICMP Echo Requests/Responses_ with a new code. 
+namely _ICMP Echo Requests/Responses_ with a new code.  
+Effectively, this is a form of **code point squatting** that we perform
+in order to measure the deployability of reverse traceroute on the public Internet.
+Should the standardization process require different code points in the future, the software will be changed accordingly.
+Therefore, please always use the latest version.
 
 ## Resources
 Project website: https://net.hs-augsburg.de/en/project/reverse-traceroute/  
