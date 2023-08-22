@@ -68,15 +68,14 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
     ipaddr_t target = origin;
 
     if (parse_mp_hdr(cursor) == 0) {
-        if (source_allowed_multipart(&origin) < 0)
-            return TC_ACT_SHOT;
-
         struct icmp_extobj_hdr *obj;
         if (PARSE(cursor, &obj) < 0)
             return TC_ACT_SHOT;
 
-        if (CONFIG_INDIRECT_TRACE_ENABLED && bpf_ntohs(obj->length) == 16 &&
-            obj->class_num == 5 && obj->class_type == 0) {
+        if (CONFIG_INDIRECT_TRACE_ENABLED &&
+            source_allowed_multipart(&origin) == 0 &&
+            bpf_ntohs(obj->length) == 16 && obj->class_num == 5 &&
+            obj->class_type == 0) {
             struct in6_addr *addr;
             if (PARSE(cursor, &addr) < 0)
                 return TC_ACT_SHOT;
