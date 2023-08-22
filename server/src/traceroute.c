@@ -17,7 +17,9 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "cidr.h"
 #include "ipaddr.h"
+#include "netlist.h"
 #include "messages.h"
 #include "net.h"
 #include "traceroute.skel.h"
@@ -62,8 +64,8 @@ struct args {
 
 const char *fmt_help_message =
     "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--[no-]indirect]\n"
-    "\t\t[--[no-]tcp-syn-probes] [--sources-from FILENAME]\n"
-    "\t\t[--indirect-sources-from FILENAME] ifname\n"
+    "\t\t[--[no-]tcp-syn-probes] [--allow-from FILENAME]\n"
+    "\t\t[--allow-indirect-from FILENAME] ifname\n"
     "\n"
     "\t-t: The time after which a session expires, in nanoseconds.\n"
     "\t-n: The maximum number of sessions the server can handle.\n"
@@ -71,9 +73,9 @@ const char *fmt_help_message =
     "trace target.\n"
     "\t--[no-]tcp-syn-probes: Whether or not TCP probes are sent with the SYN "
     "flag set.\n"
-    "\t--sources-from: The filename that contains allowed networks in CIDR "
+    "\t--allow-from: The filename that contains allowed networks in CIDR "
     "notation for traceroute requests\n"
-    "\t--indirect-sources-from: The filename that contains allowed networks in "
+    "\t--allow-indirect-from: The filename that contains allowed networks in "
     "CIDR notation for indirect traceroute requests\n";
 
 static int parse_args(int argc, char **argv, struct args *args)
@@ -85,8 +87,8 @@ static int parse_args(int argc, char **argv, struct args *args)
         {"no-indirect", no_argument, &args->indirect_disabled, 1},
         {"tcp-syn-probes", no_argument, &args->tcp_syn_enabled, 1},
         {"no-tcp-syn-probes", no_argument, &args->tcp_syn_disabled, 1},
-        {"sources-from", required_argument, 0, 's'},
-        {"indirect-sources-from", required_argument, 0, 'i'},
+        {"allow-from", required_argument, 0, 's'},
+        {"allow-indirect-from", required_argument, 0, 'i'},
         {0, 0, 0, 0}};
 
     char *endptr;
@@ -156,126 +158,61 @@ help:
     return -1;
 }
 
-struct list_elem {
-    struct net_entry entry;
-    struct list_elem *next;
-};
 
-static int create_netmask(const ipaddr_t address, __u8 prefixlen,
-                          ipaddr_t *netmask)
+static int parse_networks(const char *sources_filename, struct list_head *head)
 {
-    if (prefixlen > sizeof(ipaddr_t) * 8)
-        return -2;
-
-    const __u8 nchunks = sizeof(ipaddr_t) / sizeof(__be32);
-    __be32 *addr_chunk = (__be32 *)&address;
-    __be32 *mask_chunk = (__be32 *)netmask;
-
-    int index = prefixlen / 32;
-    int value = prefixlen % 32;
-
-    mask_chunk[index] = htonl((__u64)0xffffffff << (32 - value));
-    for (int i = 0; i < index; i++)
-        mask_chunk[i] = 0xffffffff;
-    for (int i = index + 1; i < nchunks; i++)
-        mask_chunk[i] = 0;
-
-    // Validate that no host bits are set for the network address
-    for (int i = index; i < nchunks; i++)
-        if ((addr_chunk[i] & mask_chunk[i]) != addr_chunk[i])
-            return -1;
-
-    return 0;
-}
-
-static void free_networks(struct list_elem *head)
-{
-    while (head) {
-        struct list_elem *elem = head;
-        head = head->next;
-        free(elem);
-    }
-}
-
-static ssize_t parse_networks(const char *sources_filename,
-                              struct list_elem **head)
-{
-    struct list_elem *list_head = NULL;
-    size_t list_len = 0, nentries = 0, nlines = 0;
-
     FILE *sources = fopen(sources_filename, "r");
     if (!sources) {
         fprintf(stderr, "Failed to open '%s'!\n", sources_filename);
-        return 0;
+        return -1;
     }
     fprintf(stderr, "Attempting to read network entries from '%s'\n",
             sources_filename);
 
-    char *line = NULL;
-    size_t line_size = 0;
     ssize_t nread;
+    size_t line_size = 0, nentries = 0, nlines = 0;
+    char *line = NULL;
     errno = 0;
+
     while ((nread = getline(&line, &line_size, sources)) > 0) {
         nlines += 1;
         // Replace newline with string-terminator
-        ipaddr_t addr;
         line[nread - 1] = '\0';
 
         // Ignore empty lines and comments
         if (*line == '\0' || *line == '#')
             continue;
-
         nentries += 1;
-        char *original_line = strdup(line);
 
-#define PARSE_ERROR(error)                                                     \
-    fprintf(stderr, "Line %ld: '%s': %s\n", nlines, original_line, (error))
-
-        char *address_start = strtok(line, "/");
-        char *prefixlen_start = strtok(NULL, "/");
-
-        if (!prefixlen_start) {
-            PARSE_ERROR("expected a network in CIDR notation");
-            goto err_loop;
-        }
-
-        char *endptr;
-        unsigned long prefixlen = strtoul(prefixlen_start, &endptr, 0);
-        if (*endptr != '\0' || endptr == prefixlen_start) {
-            PARSE_ERROR("invalid prefix length");
-            goto err_loop;
-        }
-
-        if (inet_pton(ADDR_FAMILY, address_start, &addr) == 0) {
-            PARSE_ERROR("invalid address format");
-            goto err_loop;
-        }
-
-        ipaddr_t netmask;
-        switch (create_netmask(addr, prefixlen, &netmask)) {
+        struct net_entry entry;
+        switch (parse_cidr(ADDR_FAMILY, line, &entry)) {
+#define PARSE_ERROR(err) fprintf(stderr, "Line %lu: '%s': %s\n", nlines, line, err)
         case 0:
+            if (netlist_push_back(head, &entry) < 0) {
+                fprintf(stderr, "Failed to add network entry to the list!\n");
+                return -1;
+            }
             break;
-        case -1:
+        case -CIDR_ERR_FORMAT:
+            PARSE_ERROR("expected network in CIDR format");
+            break;
+        case -CIDR_ERR_ADDRESS:
+            PARSE_ERROR("invalid address format");
+            break;
+        case -CIDR_ERR_PREFIX:
+            PARSE_ERROR("invalid prefix length");
+            break;
+        case -CIDR_ERR_PREFIXLEN: 
+            PARSE_ERROR("prefix length is outside of valid bounds");
+            break;
+        case -CIDR_ERR_HOSTBITS:
             PARSE_ERROR("host bits are set");
-            goto err_loop;
-        case -2:
-            PARSE_ERROR("prefix length outside of bounds");
-            goto err_loop;
+            break;
         default:
-            goto err_loop;
-        }
-
-        struct list_elem *new_elem = malloc(sizeof(*list_head));
-        new_elem->entry.address = addr;
-        new_elem->entry.netmask = netmask;
-        new_elem->next = list_head;
-
-        list_head = new_elem;
-        list_len += 1;
-
-    err_loop:
+            PARSE_ERROR("unknown error");
+            break;
 #undef PARSE_ERROR
-        free(original_line);
+        }
     }
 
     free(line);
@@ -285,40 +222,65 @@ static ssize_t parse_networks(const char *sources_filename,
         perror("getline: ");
         goto cleanup;
     }
-
-    if (nentries == 0) {
-        fprintf(stderr, "No network entries found in '%s'\n", sources_filename);
-        goto cleanup;
-    }
-    if (list_len != nentries) {
+    if (head->len != nentries) {
         fprintf(stderr, "Errors encountered while parsing '%s'\n",
                 sources_filename);
         goto cleanup;
     }
 
-    fprintf(stderr, "Loaded %ld network entries from '%s'\n", list_len,
-            sources_filename);
-    *head = list_head;
+    if (nentries == 0)
+        fprintf(stderr, "No network entries found in '%s'\n", sources_filename);
+    else
+        fprintf(stderr, "Loaded %ld network entries from '%s'\n", head->len,
+                sources_filename);
+
     return nentries;
+
 cleanup:
-    free_networks(list_head);
-    return 0;
+    netlist_free(head);
+    return -1;
 }
 
-static int update_networks(struct bpf_map *map, struct list_elem *list_head)
+static int update_networks(struct bpf_map *map, struct list_head *list_head)
 {
+    struct net_entry entry;
     net_index counter = 0;
 
-    for (struct list_elem *elem = list_head; elem != NULL; elem = elem->next) {
-        if (bpf_map__update_elem(map, &counter, sizeof(counter), &elem->entry,
-                                 sizeof(elem->entry), 0) < 0)
-            return -1;
+    while (netlist_pop_front(list_head, &entry) == 0) {
+        if (bpf_map__update_elem(map, &counter, sizeof(counter), &entry,
+                                 sizeof(entry), 0) < 0)
+                                 return -1;
+        
+        char buffer[ADDRSTRLEN];
+        fprintf(stderr, "Inserted %s ", inet_ntop(ADDR_FAMILY, &entry.address, buffer, sizeof(buffer)));
+        fprintf(stderr, "with netmask %s ", inet_ntop(ADDR_FAMILY, &entry.netmask, buffer, sizeof(buffer)));
+        fprintf(stderr, "into position %u\n", counter);
 
-        counter += 1;
+        counter++;
     }
+    
     return 0;
 }
 
+static int prepare_networks(const char *filename, struct bpf_map *map, struct list_head *head)
+{
+    if (parse_networks(filename, head) < 0)
+        return -1;
+
+    // When no networks were found (empty file) don't resize the map.
+    // In that case we still want to rely on the default values.
+    if (head->len == 0)
+        return 0;
+
+    if (bpf_map__set_max_entries(map, head->len) < 0) {
+        netlist_free(head);
+        return -1;
+    }
+
+    fprintf(stderr, "Resized map to %zu entries\n", head->len);
+
+    return 0;
+}
 
 static struct traceroute *traceroute_init(const struct args *args)
 {
@@ -351,38 +313,18 @@ static struct traceroute *traceroute_init(const struct args *args)
         }
     }
 
-    struct list_elem *sources = NULL;
-    size_t sources_len;
+    struct list_head sources = LIST_INIT;
     if (args->sources_filename) {
-        sources_len = parse_networks(args->sources_filename, &sources);
-        if (sources_len == 0)
+        if (prepare_networks(args->sources_filename, traceroute->maps.allowed_sources, &sources) < 0)
             goto err;
-        if (bpf_map__set_max_entries(traceroute->maps.allowed_sources,
-                                     sources_len) < 0) {
-            fprintf(
-                stderr,
-                "Failed to set maximum number of allowed networks to %zu!\n",
-                sources_len);
-            goto free_src;
-        }
     }
 
-    struct list_elem *indirect_sources = NULL;
-    size_t indirect_sources_len;
+    struct list_head indirect_sources = LIST_INIT;
     if (args->indirect_sources_filename) {
         if (traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED) {
-            indirect_sources_len = parse_networks(
-                args->indirect_sources_filename, &indirect_sources);
-            if (indirect_sources_len == 0)
+            if (prepare_networks(args->indirect_sources_filename, traceroute->maps.allowed_sources_multipart, &indirect_sources) < 0) {
+                netlist_free(&sources);
                 goto err;
-            if (bpf_map__set_max_entries(
-                    traceroute->maps.allowed_sources_multipart,
-                    indirect_sources_len) < 0) {
-                fprintf(stderr,
-                        "Failed to set maximum number of allowed networks for "
-                        "indirect requests to %zu!\n",
-                        indirect_sources_len);
-                goto free_ind;
             }
         } else {
             fprintf(stderr, "Indirect tracing is disabled, ignoring the "
@@ -392,27 +334,21 @@ static struct traceroute *traceroute_init(const struct args *args)
 
     if (traceroute__load(traceroute) < 0) {
         fprintf(stderr, "Failed to load the program!\n");
-        goto free_ind;
+        goto free;
     }
 
-    if (sources) {
-        if (update_networks(traceroute->maps.allowed_sources, sources) < 0)
-            goto free_ind;
-    }
-    if (indirect_sources) {
-        if (update_networks(traceroute->maps.allowed_sources_multipart,
-                            indirect_sources) < 0)
-            goto free_ind;
-    }
+    if (update_networks(traceroute->maps.allowed_sources, &sources) < 0)
+        goto free;
+    if (update_networks(traceroute->maps.allowed_sources_multipart, &indirect_sources) < 0)
+        goto free;
 
-    free_networks(sources);
-    free_networks(indirect_sources);
+    netlist_free(&sources);
+    netlist_free(&indirect_sources);
     return traceroute;
 
-free_ind:
-    free_networks(indirect_sources);
-free_src:
-    free_networks(sources);
+free:
+    netlist_free(&sources);
+    netlist_free(&indirect_sources);
 err:
     traceroute__destroy(traceroute);
     return NULL;
