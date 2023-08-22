@@ -20,6 +20,9 @@ struct netlist_head {
     size_t len;
 };
 
+#define LIST_LOOP(head, entry) \
+    for (struct list_elem *__elem = head->first; __elem != NULL; (__elem = elem->next, (entry) = &__elem->entry))
+
 #define LIST_HEAD_GUARD(head)                                                  \
     assert(((head)->first == NULL && (head)->len == 0) ||                      \
            ((head)->first != NULL && (head)->len > 0))
