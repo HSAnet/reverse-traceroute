@@ -63,9 +63,9 @@ struct args {
 };
 
 const char *fmt_help_message =
-    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES] [--[no-]indirect]\n"
-    "\t\t[--[no-]tcp-syn-probes] [--allow-from FILENAME]\n"
-    "\t\t[--allow-indirect-from FILENAME] ifname\n"
+    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES]\n"
+    "\t\t[--[no-]indirect] [--[no-]tcp-syn-probes]\n"
+    "\t\t[--allow-from FILENAME] [--allow-indirect-from FILENAME] ifname\n"
     "\n"
     "\t-t: The time after which a session expires, in nanoseconds.\n"
     "\t-n: The maximum number of sessions the server can handle.\n"
@@ -74,9 +74,9 @@ const char *fmt_help_message =
     "\t--[no-]tcp-syn-probes: Whether or not TCP probes are sent with the SYN "
     "flag set.\n"
     "\t--allow-from: The filename that contains allowed networks in CIDR "
-    "notation for traceroute requests\n"
+    "notation for traceroute requests.\n"
     "\t--allow-indirect-from: The filename that contains allowed networks in "
-    "CIDR notation for indirect traceroute requests\n";
+    "CIDR notation for indirect traceroute requests.\n";
 
 static int parse_args(int argc, char **argv, struct args *args)
 {
