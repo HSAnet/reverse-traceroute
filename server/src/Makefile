@@ -14,6 +14,7 @@ BPF_PROG := $(BUILD_DIR)/traceroute.o
 SKELETON_DIR := $(BUILD_DIR)/include
 skeleton := $(SKELETON_DIR)/traceroute.skel.h
 
+INCLUDES += -Icommon
 
 server := $(OUTDIR)/augsburg-traceroute-server-$(suffix)
 

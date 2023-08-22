@@ -1,7 +1,7 @@
 #ifndef BPF_IP_GENERIC_H
 #define BPF_IP_GENERIC_H
 
-#include "../ipaddr.h"
+#include "ipaddr.h"
 #include <linux/in.h>
 #include <linux/icmp.h>
 #include <linux/if_ether.h>

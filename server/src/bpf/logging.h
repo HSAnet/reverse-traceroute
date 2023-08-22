@@ -20,7 +20,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #ifndef BPF_LOGGING_H
 #define BPF_LOGGING_H
 
-#include "../messages.h"
+#include "messages.h"
 #include "internal.h"
 
 struct session_key;

@@ -1,4 +1,4 @@
-#include "../net.h"
+#include "net.h"
 #include "source.h"
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
