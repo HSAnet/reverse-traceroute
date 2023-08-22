@@ -158,6 +158,13 @@ help:
     return -1;
 }
 
+static void free_args(struct args *args)
+{
+    if (args->sources_filename)
+        free(args->sources_filename);
+    if (args->indirect_sources_filename)
+        free(args->sources_filename);
+}
 
 static int parse_networks(const char *sources_filename, struct netlist_head *head)
 {
@@ -418,6 +425,8 @@ int main(int argc, char **argv)
     libbpf_set_print(libbpf_print_fn);
 
     tr = traceroute_init(&args);
+    free_args(&args);
+
     if (!tr)
         goto exit;
 

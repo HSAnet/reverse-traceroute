@@ -41,12 +41,16 @@ static int parse_cidr(int addr_family, const char *str, struct net_entry *net)
         return -CIDR_ERR_PREFIX;
     }
 
-    if (prefixlen > sizeof(ipaddr_t) * 8)
+    if (prefixlen > sizeof(ipaddr_t) * 8) {
+        free(cidr);
         return -CIDR_ERR_PREFIXLEN;
+    }
 
     ipaddr_t address; 
-    if (inet_pton(addr_family, address_start, &address) == 0)
+    if (inet_pton(addr_family, address_start, &address) == 0) {
+        free(cidr);
         return -CIDR_ERR_ADDRESS;
+    }
     free(cidr);
 
     ipaddr_t netmask;

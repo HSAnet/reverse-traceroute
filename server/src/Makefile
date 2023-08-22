@@ -28,7 +28,7 @@ include tools.mk
 .PHONY: server
 server: $(server)
 $(server): traceroute.c $(skeleton) | $(LIBBPF)
-	clang-14 -Wall traceroute.c $(LIBBPF) $(INCLUDES) -I$(SKELETON_DIR) -D$(TRACEROUTE_AF) -o $@ -lelf -lz -static
+	clang-14 -Wall traceroute.c $(LIBBPF) $(INCLUDES) -I$(SKELETON_DIR) -D$(TRACEROUTE_AF) -o $@ -lelf -lz
 
 $(skeleton): $(BPF_PROG) | $(BPFTOOL) $(SKELETON_DIR)
 	$(BPFTOOL) gen skeleton $(BPF_PROG) > $@
