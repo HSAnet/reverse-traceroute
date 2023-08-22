@@ -35,7 +35,7 @@ struct ethhdr;
  * header, all options are truncated.
  */
 static inline int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
-                          struct ethhdr **eth, iphdr_t **ip)
+                               struct ethhdr **eth, iphdr_t **ip)
 {
     int ret = bpf_skb_change_tail(cursor->skb,
                                   sizeof(**eth) + sizeof(**ip) + probe_len, 0);

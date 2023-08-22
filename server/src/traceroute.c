@@ -166,7 +166,8 @@ static void free_args(struct args *args)
         free(args->sources_filename);
 }
 
-static int parse_networks(const char *sources_filename, struct netlist_head *head)
+static int parse_networks(const char *sources_filename,
+                          struct netlist_head *head)
 {
     FILE *sources = fopen(sources_filename, "r");
     if (!sources) {
@@ -193,7 +194,8 @@ static int parse_networks(const char *sources_filename, struct netlist_head *hea
 
         struct net_entry entry;
         switch (parse_cidr(ADDR_FAMILY, line, &entry)) {
-#define PARSE_ERROR(err) fprintf(stderr, "Line %lu: '%s': %s\n", nlines, line, err)
+#define PARSE_ERROR(err)                                                       \
+    fprintf(stderr, "Line %lu: '%s': %s\n", nlines, line, err)
         case 0:
             if (netlist_push_back(head, &entry) < 0) {
                 fprintf(stderr, "Failed to add network entry to the list!\n");
@@ -209,7 +211,7 @@ static int parse_networks(const char *sources_filename, struct netlist_head *hea
         case -CIDR_ERR_PREFIX:
             PARSE_ERROR("invalid prefix length");
             break;
-        case -CIDR_ERR_PREFIXLEN: 
+        case -CIDR_ERR_PREFIXLEN:
             PARSE_ERROR("prefix length is outside of valid bounds");
             break;
         case -CIDR_ERR_HOSTBITS:
@@ -256,20 +258,23 @@ static int update_networks(struct bpf_map *map, struct netlist_head *list_head)
     while (netlist_pop_front(list_head, &entry) == 0) {
         if (bpf_map__update_elem(map, &counter, sizeof(counter), &entry,
                                  sizeof(entry), 0) < 0)
-                                 return -1;
-        
+            return -1;
+
         char buffer[ADDRSTRLEN];
-        fprintf(stderr, "Inserted %s ", inet_ntop(ADDR_FAMILY, &entry.address, buffer, sizeof(buffer)));
-        fprintf(stderr, "with netmask %s ", inet_ntop(ADDR_FAMILY, &entry.netmask, buffer, sizeof(buffer)));
+        fprintf(stderr, "Inserted %s ",
+                inet_ntop(ADDR_FAMILY, &entry.address, buffer, sizeof(buffer)));
+        fprintf(stderr, "with netmask %s ",
+                inet_ntop(ADDR_FAMILY, &entry.netmask, buffer, sizeof(buffer)));
         fprintf(stderr, "into position %u\n", counter);
 
         counter++;
     }
-    
+
     return 0;
 }
 
-static int prepare_networks(const char *filename, struct bpf_map *map, struct netlist_head *head)
+static int prepare_networks(const char *filename, struct bpf_map *map,
+                            struct netlist_head *head)
 {
     if (parse_networks(filename, head) < 0)
         return -1;
@@ -322,14 +327,17 @@ static struct traceroute *traceroute_init(const struct args *args)
 
     struct netlist_head sources = LIST_INIT;
     if (args->sources_filename) {
-        if (prepare_networks(args->sources_filename, traceroute->maps.allowed_sources, &sources) < 0)
+        if (prepare_networks(args->sources_filename,
+                             traceroute->maps.allowed_sources, &sources) < 0)
             goto err;
     }
 
     struct netlist_head indirect_sources = LIST_INIT;
     if (args->indirect_sources_filename) {
         if (traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED) {
-            if (prepare_networks(args->indirect_sources_filename, traceroute->maps.allowed_sources_multipart, &indirect_sources) < 0) {
+            if (prepare_networks(args->indirect_sources_filename,
+                                 traceroute->maps.allowed_sources_multipart,
+                                 &indirect_sources) < 0) {
                 netlist_free(&sources);
                 goto err;
             }
@@ -346,7 +354,8 @@ static struct traceroute *traceroute_init(const struct args *args)
 
     if (update_networks(traceroute->maps.allowed_sources, &sources) < 0)
         goto free;
-    if (update_networks(traceroute->maps.allowed_sources_multipart, &indirect_sources) < 0)
+    if (update_networks(traceroute->maps.allowed_sources_multipart,
+                        &indirect_sources) < 0)
         goto free;
 
     netlist_free(&sources);

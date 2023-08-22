@@ -42,7 +42,8 @@ static inline void swap_addr_iphdr(iphdr_t *iphdr, const ipaddr_t *target)
     iphdr->daddr = tmp_ip;
 }
 
-static inline void swap_addr(struct ethhdr *eth, iphdr_t *ip, const ipaddr_t *target)
+static inline void swap_addr(struct ethhdr *eth, iphdr_t *ip,
+                             const ipaddr_t *target)
 {
     swap_addr_ethhdr(eth);
     swap_addr_iphdr(ip, target);

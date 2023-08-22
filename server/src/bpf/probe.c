@@ -35,10 +35,9 @@ union tcp_payload {
         __u8 kind;
         __u8 len;
         __u16 value;
-    }  mss_option;
+    } mss_option;
     __be32 data;
 };
-
 
 /*
  * Checks if the ICMP packet MAY be an answer to a probe.
@@ -118,7 +117,7 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request,
         if (tcp->source == SOURCE_PORT) {
             *identifier = bpf_htonl(tcp->seq);
             return 0;
-        }   
+        }
     } else {
         if (PARSE(cursor, &tcp) < 0)
             return -1;
@@ -127,17 +126,21 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request,
 
         // Make sure the ACK flag is set, as only in that
         // case can we evaluate the ack-number, which contains our identifier.
-        // We expect only SYN or RST packets, depending on whether the port was open.
-        // Any other traffic can not created by traceroute probes.
-        // In order to parse the packet, the ACK flag MUST be present, otherwise
+        // We expect only SYN or RST packets, depending on whether the port was
+        // open. Any other traffic can not created by traceroute probes. In
+        // order to parse the packet, the ACK flag MUST be present, otherwise
         // the acknowledgement number carries no meaning.
         // We rely on the ack-number to carry back the original sequence
-        if ((tcp->ack && tcp->rst) || (tcp->ack && CONFIG_TCP_SYN_ENABLED && tcp->syn)) {
+        if ((tcp->ack && tcp->rst) ||
+            (tcp->ack && CONFIG_TCP_SYN_ENABLED && tcp->syn)) {
             *identifier = bpf_ntohl(tcp->ack_seq);
             // An RST-ACK to a non-syn packet carries the previous sequence.
-            // An ACK packet triggered by a SYN carries the incremented sequence.
-            if (CONFIG_TCP_SYN_ENABLED) *identifier -= 1;
-            else *identifier -= sizeof(union tcp_payload);
+            // An ACK packet triggered by a SYN carries the incremented
+            // sequence.
+            if (CONFIG_TCP_SYN_ENABLED)
+                *identifier -= 1;
+            else
+                *identifier -= sizeof(union tcp_payload);
             return 0;
         }
     }
@@ -222,8 +225,7 @@ static int probe_set_udp(struct cursor *cursor, struct probe *probe,
     if (PARSE(cursor, &payload) < 0)
         return -1;
 
-    pseudo_hdr =
-        pseudo_header(*ip, payload_len, IPPROTO_UDP);
+    pseudo_hdr = pseudo_header(*ip, payload_len, IPPROTO_UDP);
     udp->dest = probe->flow ? probe->flow : bpf_htons(53);
     udp->source = SOURCE_PORT;
     udp->check = probe->identifier;
@@ -258,8 +260,7 @@ static int probe_set_tcp(struct cursor *cursor, struct probe *probe,
     if (PARSE(cursor, &payload) < 0)
         return -1;
 
-    pseudo_hdr =
-        pseudo_header(*ip, payload_len, IPPROTO_TCP);
+    pseudo_hdr = pseudo_header(*ip, payload_len, IPPROTO_TCP);
     // Zero out tcp fields.
     *((__be32 *)tcp + 1) = 0;
     *((__be32 *)tcp + 2) = 0;
@@ -281,7 +282,6 @@ static int probe_set_tcp(struct cursor *cursor, struct probe *probe,
         tcp->doff = 5;
         payload->data = bpf_get_prandom_u32();
     }
-
 
     tcp->check = 0;
     tcp->check = csum(tcp, payload_len, pseudo_hdr);

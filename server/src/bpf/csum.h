@@ -45,7 +45,8 @@ static inline __sum16 csum(const void *cursor, __u16 len, __be32 seed)
     return (__sum16)~sum;
 }
 
-static inline __be32 pseudo_header(const iphdr_t *ip, __u16 probe_len, __u8 protocol)
+static inline __be32 pseudo_header(const iphdr_t *ip, __u16 probe_len,
+                                   __u8 protocol)
 {
     __be32 pseudo_hdr = bpf_htons(probe_len);
 

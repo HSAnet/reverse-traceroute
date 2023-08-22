@@ -4,9 +4,9 @@
 #if defined(TRACEROUTE_V4)
 #elif defined(TRACEROUTE_V6)
 #else
-    // Define a default to silence errors in the editor
-    #define TRACEROUTE_V4
-    #error "No address family defined. Specify TRACEROUTE_V4|TRACEROUTE_V6."
+// Define a default to silence errors in the editor
+#define TRACEROUTE_V4
+#error "No address family defined. Specify TRACEROUTE_V4|TRACEROUTE_V6."
 #endif
 
 #if defined(TRACEROUTE_V4)

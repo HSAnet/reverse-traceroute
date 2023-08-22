@@ -9,8 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <stdio.h>
-
 enum cidr_parse_error {
     CIDR_ERR_FORMAT = 1,
     CIDR_ERR_PREFIX = 2,
@@ -18,7 +16,6 @@ enum cidr_parse_error {
     CIDR_ERR_ADDRESS = 4,
     CIDR_ERR_HOSTBITS = 5,
 };
-
 
 static int parse_cidr(int addr_family, const char *str, struct net_entry *net)
 {
@@ -28,7 +25,7 @@ static int parse_cidr(int addr_family, const char *str, struct net_entry *net)
     char *prefixlen_start = strtok(NULL, "/");
 
     if (!prefixlen_start) {
-        //PARSE_ERROR("expected a network in CIDR notation");
+        // PARSE_ERROR("expected a network in CIDR notation");
         free(cidr);
         return -CIDR_ERR_FORMAT;
     }
@@ -36,7 +33,7 @@ static int parse_cidr(int addr_family, const char *str, struct net_entry *net)
     char *endptr;
     unsigned long prefixlen = strtoul(prefixlen_start, &endptr, 0);
     if (*endptr != '\0' || endptr == prefixlen_start) {
-        //PARSE_ERROR("invalid prefix length");
+        // PARSE_ERROR("invalid prefix length");
         free(cidr);
         return -CIDR_ERR_PREFIX;
     }
@@ -46,7 +43,7 @@ static int parse_cidr(int addr_family, const char *str, struct net_entry *net)
         return -CIDR_ERR_PREFIXLEN;
     }
 
-    ipaddr_t address; 
+    ipaddr_t address;
     if (inet_pton(addr_family, address_start, &address) == 0) {
         free(cidr);
         return -CIDR_ERR_ADDRESS;

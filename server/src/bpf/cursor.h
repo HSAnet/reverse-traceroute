@@ -61,12 +61,14 @@ static inline void cursor_init(struct cursor *cursor, struct __sk_buff *skb)
     cursor_reset(cursor);
 }
 
-static inline void cursor_clone(const struct cursor *original, struct cursor *clone)
+static inline void cursor_clone(const struct cursor *original,
+                                struct cursor *clone)
 {
     *clone = *original;
 }
 
-static inline int PARSE_IP(struct cursor *cursor, iphdr_t **hdr, __u8 *const proto)
+static inline int PARSE_IP(struct cursor *cursor, iphdr_t **hdr,
+                           __u8 *const proto)
 {
     if (PARSE(cursor, hdr) < 0)
         return -1;
