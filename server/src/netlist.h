@@ -1,5 +1,5 @@
-#ifndef LIST_H
-#define LIST_H
+#ifndef NETLIST_H
+#define NETLIST_H
 
 #include "net.h"
 #include <assert.h>
@@ -12,7 +12,7 @@ struct netlist_elem {
 };
 
 #define LIST_INIT { NULL, 0 }
-struct list_head {
+struct netlist_head {
     struct netlist_elem *first;
     size_t len;
 };
@@ -21,7 +21,7 @@ struct list_head {
 #define LIST_HEAD_GUARD(head) \
     assert(((head)->first == NULL && (head)->len == 0) || ((head)->first != NULL && (head)->len > 0))
 
-int netlist_push_back(struct list_head *head, struct net_entry *entry)
+static int netlist_push_back(struct netlist_head *head, struct net_entry *entry)
 {
     LIST_HEAD_GUARD(head);
 
@@ -44,7 +44,7 @@ int netlist_push_back(struct list_head *head, struct net_entry *entry)
     return 0;
 }
 
-int netlist_pop_front(struct list_head *head, struct net_entry *elem)
+static int netlist_pop_front(struct netlist_head *head, struct net_entry *elem)
 {
     LIST_HEAD_GUARD(head);
 
@@ -59,7 +59,7 @@ int netlist_pop_front(struct list_head *head, struct net_entry *elem)
     return 0;
 }
 
-void netlist_free(struct list_head *head)
+static void netlist_free(struct netlist_head *head)
 {
     LIST_HEAD_GUARD(head);
     while (netlist_pop_front(head, NULL) == 0);
