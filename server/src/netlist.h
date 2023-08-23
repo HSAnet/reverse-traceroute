@@ -12,7 +12,8 @@ struct netlist_elem {
 };
 
 #define NETLIST_INIT                                                           \
-    (struct netlist) {                                                                          \
+    (struct netlist)                                                           \
+    {                                                                          \
         NULL, NULL, 0                                                          \
     }
 struct netlist {
@@ -30,9 +31,9 @@ struct netlist {
         ((head)->first != NULL && (head)->last != NULL && (head)->len > 0))
 
 /**
- * @brief Appends a network to the end of \p list. 
+ * @brief Appends a network to the end of \p list.
  * The element pointed to by \p elem is copied to the heap.
- * 
+ *
  * @param list The list to append to.
  * @param elem A pointer to the new element.
  * @return -1 on failure, 0 on success.
@@ -63,10 +64,12 @@ static int netlist_push_back(struct netlist *list, struct network *elem)
 /**
  * @brief Removes the first element from the @p list
  * and copies it's value to the location referenced by @p elem.
- * 
- * @details @p elem can be a NULL pointer, in which case the first element will be removed.
+ *
+ * @details @p elem can be a NULL pointer, in which case the first element will
+ * be removed.
  * @param list The list from which to remove the first element.
- * @param elem A pointer to a valid memory location, which will contain the first network element.
+ * @param elem A pointer to a valid memory location, which will contain the
+ * first network element.
  * @return -1 when the list is empty, 0 on success.
  */
 static int netlist_pop_front(struct netlist *list, struct network *elem)
@@ -92,7 +95,7 @@ static int netlist_pop_front(struct netlist *list, struct network *elem)
 
 /**
  * @brief Removes all elements from the @p list.
- * 
+ *
  * @param list The list to clear.
  */
 static void netlist_clear(struct netlist *list)

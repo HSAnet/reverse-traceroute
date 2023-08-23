@@ -11,9 +11,16 @@ struct network {
     ipaddr_t netmask;
 };
 
-static inline int net_contains(struct network *net, ipaddr_t *addr)
+/**
+ * @brief Validates whether the @p address is part of the network @p net.
+ *
+ * @param net The candidate network.
+ * @param address The address that should be validated.
+ * @return 0 if @p adress is part of the network @p net, -1 otherwise.
+ */
+static inline int net_contains(struct network *net, ipaddr_t *address)
 {
-    __be32 *source_chunk = (__be32 *)addr;
+    __be32 *source_chunk = (__be32 *)address;
     __be32 *netaddr_chunk = (__be32 *)&net->address;
     __be32 *netmask_chunk = (__be32 *)&net->netmask;
 

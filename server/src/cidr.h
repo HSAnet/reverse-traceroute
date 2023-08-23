@@ -17,6 +17,16 @@ enum cidr_parse_error {
     CIDR_ERR_HOSTBITS = 5,
 };
 
+/**
+ * @brief Parses a network string in CIDR notation and returns a network
+ * structure.
+ *
+ * @param addr_family The address family, AF_INET or AF_INET6.
+ * @param str The null-terminated network string in CIDR notation.
+ * @param net A pointer to a valid memory location that will contain the
+ * resulting network structure on success.
+ * @return 0 on success, a negative errorcode on failure.
+ */
 static int parse_cidr(int addr_family, const char *str, struct network *net)
 {
     char *cidr = strdup(str);

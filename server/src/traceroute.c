@@ -167,7 +167,7 @@ static void free_args(struct args *args)
 }
 
 static int parse_networks(const char *sources_filename,
-                          struct netlist *head,
+                          struct netlist *networks,
                           struct netlist *parent_networks)
 {
     FILE *sources = fopen(sources_filename, "r");
@@ -200,15 +200,16 @@ static int parse_networks(const char *sources_filename,
         case 0:
             if (parent_networks) {
                 struct netlist_elem *elem;
-                NETLIST_LOOP(parent_networks, elem) {
+                NETLIST_LOOP(parent_networks, elem)
+                {
                     if (net_contains(&elem->net, &entry.address) == 0)
                         goto ok;
                 }
                 PARSE_ERROR("not contained in parent networks, skipping");
                 continue;
             }
-ok:
-            if (netlist_push_back(head, &entry) < 0) {
+        ok:
+            if (netlist_push_back(networks, &entry) < 0) {
                 fprintf(stderr, "Failed to add network entry to the list!\n");
                 return -1;
             }
@@ -246,7 +247,7 @@ ok:
         perror("getline: ");
         goto cleanup;
     }
-    if (head->len != nentries) {
+    if (networks->len != nentries) {
         fprintf(stderr, "Errors encountered while parsing '%s'\n",
                 sources_filename);
         goto cleanup;
@@ -255,22 +256,22 @@ ok:
     if (nentries == 0)
         fprintf(stderr, "No network entries found in '%s'\n", sources_filename);
     else
-        fprintf(stderr, "Loaded %ld network entries from '%s'\n", head->len,
+        fprintf(stderr, "Loaded %ld network entries from '%s'\n", networks->len,
                 sources_filename);
 
     return nentries;
 
 cleanup:
-    netlist_clear(head);
+    netlist_clear(networks);
     return -1;
 }
 
-static int update_networks(struct bpf_map *map, struct netlist *list_head)
+static int update_networks(struct bpf_map *map, struct netlist *networks)
 {
     struct network entry;
     net_index counter = 0;
 
-    while (netlist_pop_front(list_head, &entry) == 0) {
+    while (netlist_pop_front(networks, &entry) == 0) {
         if (bpf_map__update_elem(map, &counter, sizeof(counter), &entry,
                                  sizeof(entry), 0) < 0)
             return -1;
@@ -289,22 +290,23 @@ static int update_networks(struct bpf_map *map, struct netlist *list_head)
 }
 
 static int load_networks(const char *filename, struct bpf_map *map,
-                            struct netlist *head, struct netlist *parent_networks)
+                         struct netlist *networks,
+                         struct netlist *parent_networks)
 {
-    if (parse_networks(filename, head, parent_networks) < 0)
+    if (parse_networks(filename, networks, parent_networks) < 0)
         return -1;
 
     // When no networks were found (empty file) don't resize the map.
     // In that case we still want to rely on the default values.
-    if (head->len == 0)
+    if (networks->len == 0)
         return 0;
 
-    if (bpf_map__set_max_entries(map, head->len) < 0) {
-        netlist_clear(head);
+    if (bpf_map__set_max_entries(map, networks->len) < 0) {
+        netlist_clear(networks);
         return -1;
     }
 
-    fprintf(stderr, "Resized map to %zu entries\n", head->len);
+    fprintf(stderr, "Resized map to %zu entries\n", networks->len);
     return 0;
 }
 
@@ -342,7 +344,7 @@ static struct traceroute *traceroute_init(const struct args *args)
     struct netlist sources = NETLIST_INIT;
     if (args->sources_filename) {
         if (load_networks(args->sources_filename,
-                             traceroute->maps.allowed_sources, &sources, NULL) < 0)
+                          traceroute->maps.allowed_sources, &sources, NULL) < 0)
             goto err;
     }
 
@@ -350,8 +352,8 @@ static struct traceroute *traceroute_init(const struct args *args)
     if (args->indirect_sources_filename) {
         if (traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED) {
             if (load_networks(args->indirect_sources_filename,
-                                 traceroute->maps.allowed_sources_multipart,
-                                 &indirect_sources, &sources) < 0) {
+                              traceroute->maps.allowed_sources_multipart,
+                              &indirect_sources, &sources) < 0) {
                 netlist_clear(&sources);
                 goto err;
             }
