@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 struct netlist_elem {
-    struct net_entry net;
+    struct network net;
     struct netlist_elem *next;
 };
 
@@ -28,9 +28,9 @@ struct netlist_head {
     assert(((head)->first == NULL && (head)->last == NULL && (head)->len == 0) ||                      \
            ((head)->first != NULL && (head)->last != NULL && (head)->len > 0))
 
-static int netlist_push_back(struct netlist_head *head, struct net_entry *entry)
+static int netlist_push_back(struct netlist_head *head, struct network *entry)
 {
-    LIST_HEAD_GUARD(head);
+    NETLIST_HEAD_GUARD(head);
 
     struct netlist_elem *new_elem = malloc(sizeof(*new_elem));
     if (!new_elem)
@@ -51,9 +51,9 @@ static int netlist_push_back(struct netlist_head *head, struct net_entry *entry)
     return 0;
 }
 
-static int netlist_pop_front(struct netlist_head *head, struct net_entry *elem)
+static int netlist_pop_front(struct netlist_head *head, struct network *elem)
 {
-    LIST_HEAD_GUARD(head);
+    NETLIST_HEAD_GUARD(head);
 
     struct netlist_elem *first = head->first;
     if (!first)
@@ -73,11 +73,11 @@ static int netlist_pop_front(struct netlist_head *head, struct net_entry *elem)
 
 static void netlist_clear(struct netlist_head *head)
 {
-    LIST_HEAD_GUARD(head);
+    NETLIST_HEAD_GUARD(head);
     while (netlist_pop_front(head, NULL) == 0)
         ;
 }
 
-#undef LIST_HEAD_GUARD
+#undef NETLIST_HEAD_GUARD
 
 #endif

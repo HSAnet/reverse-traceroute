@@ -184,19 +184,19 @@ static int parse_networks(const char *sources_filename,
     errno = 0;
 
     while ((nread = getline(&line, &line_size, sources)) > 0) {
-        nlines += 1;
+        nlines++;
         // Replace newline with string-terminator
         line[nread - 1] = '\0';
 
         // Ignore empty lines and comments
         if (*line == '\0' || *line == '#')
             continue;
-        nentries += 1;
+
+#define PARSE_ERROR(err)                                                       \
+    fprintf(stderr, "Line %lu: '%s': %s\n", nlines, line, err)
 
         struct network entry;
         switch (parse_cidr(ADDR_FAMILY, line, &entry)) {
-#define PARSE_ERROR(err)                                                       \
-    fprintf(stderr, "Line %lu: '%s': %s\n", nlines, line, err)
         case 0:
             if (parent_networks) {
                 struct netlist_elem *elem;
@@ -204,7 +204,7 @@ static int parse_networks(const char *sources_filename,
                     if (net_contains(&elem->net, &entry.address) == 0)
                         goto ok;
                 }
-                PARSE_ERROR("not contained in parent networks");
+                PARSE_ERROR("not contained in parent networks, skipping");
                 continue;
             }
 ok:
@@ -231,8 +231,12 @@ ok:
         default:
             PARSE_ERROR("unknown error");
             break;
-#undef PARSE_ERROR
         }
+
+        // Count this line as an entry, should the final list len
+        // and this number differ, errors were encountered.
+        nentries++;
+#undef PARSE_ERROR
     }
 
     free(line);
@@ -284,7 +288,7 @@ static int update_networks(struct bpf_map *map, struct netlist_head *list_head)
     return 0;
 }
 
-static int prepare_networks(const char *filename, struct bpf_map *map,
+static int load_networks(const char *filename, struct bpf_map *map,
                             struct netlist_head *head, struct netlist_head *parent_networks)
 {
     if (parse_networks(filename, head, parent_networks) < 0)
@@ -337,7 +341,7 @@ static struct traceroute *traceroute_init(const struct args *args)
 
     struct netlist_head sources = NETLIST_INIT;
     if (args->sources_filename) {
-        if (prepare_networks(args->sources_filename,
+        if (load_networks(args->sources_filename,
                              traceroute->maps.allowed_sources, &sources, NULL) < 0)
             goto err;
     }
@@ -345,7 +349,7 @@ static struct traceroute *traceroute_init(const struct args *args)
     struct netlist_head indirect_sources = NETLIST_INIT;
     if (args->indirect_sources_filename) {
         if (traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED) {
-            if (prepare_networks(args->indirect_sources_filename,
+            if (load_networks(args->indirect_sources_filename,
                                  traceroute->maps.allowed_sources_multipart,
                                  &indirect_sources, &sources) < 0) {
                 netlist_clear(&sources);
