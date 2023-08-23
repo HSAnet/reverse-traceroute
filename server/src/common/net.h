@@ -11,8 +11,8 @@ struct network {
     ipaddr_t netmask;
 };
 
-
-static inline int net_contains(struct network *net, ipaddr_t *addr) {
+static inline int net_contains(struct network *net, ipaddr_t *addr)
+{
     __be32 *source_chunk = (__be32 *)addr;
     __be32 *netaddr_chunk = (__be32 *)&net->address;
     __be32 *netmask_chunk = (__be32 *)&net->netmask;

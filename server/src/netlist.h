@@ -11,9 +11,9 @@ struct netlist_elem {
     struct netlist_elem *next;
 };
 
-#define NETLIST_INIT                                                              \
+#define NETLIST_INIT                                                           \
     {                                                                          \
-        NULL, NULL, 0                                                                \
+        NULL, NULL, 0                                                          \
     }
 struct netlist_head {
     struct netlist_elem *first;
@@ -21,12 +21,13 @@ struct netlist_head {
     size_t len;
 };
 
-#define NETLIST_LOOP(head, entry) \
+#define NETLIST_LOOP(head, entry)                                              \
     for ((entry) = (head)->first; (entry) != NULL; (entry) = (entry)->next)
 
-#define NETLIST_HEAD_GUARD(head)                                                  \
-    assert(((head)->first == NULL && (head)->last == NULL && (head)->len == 0) ||                      \
-           ((head)->first != NULL && (head)->last != NULL && (head)->len > 0))
+#define NETLIST_HEAD_GUARD(head)                                               \
+    assert(                                                                    \
+        ((head)->first == NULL && (head)->last == NULL && (head)->len == 0) || \
+        ((head)->first != NULL && (head)->last != NULL && (head)->len > 0))
 
 static int netlist_push_back(struct netlist_head *head, struct network *entry)
 {
@@ -63,7 +64,7 @@ static int netlist_pop_front(struct netlist_head *head, struct network *elem)
         *elem = first->net;
 
     head->first = first->next;
-    head->len --;
+    head->len--;
     if (head->len == 0)
         head->last = NULL;
 

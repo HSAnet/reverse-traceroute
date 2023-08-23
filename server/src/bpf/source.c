@@ -29,7 +29,7 @@ static int match_subnet(void *map, const void *key, const void *value,
     struct match_context *ctx = (struct match_context *)context;
 
     if (net_contains(entry, ctx->addr) < 0)
-           return 0;
+        return 0;
 
     ctx->match_found = 1;
     return 1;
