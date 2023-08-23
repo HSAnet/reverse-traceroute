@@ -11,21 +11,22 @@ struct netlist_elem {
     struct netlist_elem *next;
 };
 
-#define LIST_INIT                                                              \
+#define NETLIST_INIT                                                              \
     {                                                                          \
-        NULL, 0                                                                \
+        NULL, NULL, 0                                                                \
     }
 struct netlist_head {
     struct netlist_elem *first;
+    struct netlist_elem *last;
     size_t len;
 };
 
-#define LIST_LOOP(head, entry) \
-    for (struct list_elem *__elem = head->first; __elem != NULL; (__elem = elem->next, (entry) = &__elem->entry))
+#define NETLIST_LOOP(head, entry) \
+    for ((entry) = (head)->first; (entry) != NULL; (entry) = (entry)->next)
 
-#define LIST_HEAD_GUARD(head)                                                  \
-    assert(((head)->first == NULL && (head)->len == 0) ||                      \
-           ((head)->first != NULL && (head)->len > 0))
+#define NETLIST_HEAD_GUARD(head)                                                  \
+    assert(((head)->first == NULL && (head)->last == NULL && (head)->len == 0) ||                      \
+           ((head)->first != NULL && (head)->last != NULL && (head)->len > 0))
 
 static int netlist_push_back(struct netlist_head *head, struct net_entry *entry)
 {
@@ -38,16 +39,15 @@ static int netlist_push_back(struct netlist_head *head, struct net_entry *entry)
     new_elem->next = NULL;
     new_elem->net = *entry;
 
-    if (head->first) {
-        struct netlist_elem *last = head->first;
-        for (; last->next != NULL; last = last->next)
-            ;
-        last->next = new_elem;
+    if (head->len > 0) {
+        head->last->next = new_elem;
+        head->last = new_elem;
     } else {
         head->first = new_elem;
+        head->last = new_elem;
     }
-    head->len++;
 
+    head->len++;
     return 0;
 }
 
@@ -61,14 +61,17 @@ static int netlist_pop_front(struct netlist_head *head, struct net_entry *elem)
 
     if (elem)
         *elem = first->net;
+
     head->first = first->next;
-    head->len--;
+    head->len --;
+    if (head->len == 0)
+        head->last = NULL;
 
     free(first);
     return 0;
 }
 
-static void netlist_free(struct netlist_head *head)
+static void netlist_clear(struct netlist_head *head)
 {
     LIST_HEAD_GUARD(head);
     while (netlist_pop_front(head, NULL) == 0)

@@ -17,7 +17,7 @@ enum cidr_parse_error {
     CIDR_ERR_HOSTBITS = 5,
 };
 
-static int parse_cidr(int addr_family, const char *str, struct net_entry *net)
+static int parse_cidr(int addr_family, const char *str, struct network *net)
 {
     char *cidr = strdup(str);
 
