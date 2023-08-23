@@ -12,10 +12,10 @@ struct netlist_elem {
 };
 
 #define NETLIST_INIT                                                           \
-    {                                                                          \
+    (struct netlist) {                                                                          \
         NULL, NULL, 0                                                          \
     }
-struct netlist_head {
+struct netlist {
     struct netlist_elem *first;
     struct netlist_elem *last;
     size_t len;
@@ -29,53 +29,77 @@ struct netlist_head {
         ((head)->first == NULL && (head)->last == NULL && (head)->len == 0) || \
         ((head)->first != NULL && (head)->last != NULL && (head)->len > 0))
 
-static int netlist_push_back(struct netlist_head *head, struct network *entry)
+/**
+ * @brief Appends a network to the end of \p list. 
+ * The element pointed to by \p elem is copied to the heap.
+ * 
+ * @param list The list to append to.
+ * @param elem A pointer to the new element.
+ * @return -1 on failure, 0 on success.
+ */
+static int netlist_push_back(struct netlist *list, struct network *elem)
 {
-    NETLIST_HEAD_GUARD(head);
+    NETLIST_HEAD_GUARD(list);
 
     struct netlist_elem *new_elem = malloc(sizeof(*new_elem));
     if (!new_elem)
         return -1;
 
     new_elem->next = NULL;
-    new_elem->net = *entry;
+    new_elem->net = *elem;
 
-    if (head->len > 0) {
-        head->last->next = new_elem;
-        head->last = new_elem;
+    if (list->len > 0) {
+        list->last->next = new_elem;
+        list->last = new_elem;
     } else {
-        head->first = new_elem;
-        head->last = new_elem;
+        list->first = new_elem;
+        list->last = new_elem;
     }
 
-    head->len++;
+    list->len++;
     return 0;
 }
 
-static int netlist_pop_front(struct netlist_head *head, struct network *elem)
+/**
+ * @brief Removes the first element from the @p list
+ * and copies it's value to the location referenced by @p elem.
+ * 
+ * @details @p elem can be a NULL pointer, in which case the first element will be removed.
+ * @param list The list from which to remove the first element.
+ * @param elem A pointer to a valid memory location, which will contain the first network element.
+ * @return -1 when the list is empty, 0 on success.
+ */
+static int netlist_pop_front(struct netlist *list, struct network *elem)
 {
-    NETLIST_HEAD_GUARD(head);
+    NETLIST_HEAD_GUARD(list);
 
-    struct netlist_elem *first = head->first;
+    struct netlist_elem *first = list->first;
     if (!first)
         return -1;
 
     if (elem)
         *elem = first->net;
 
-    head->first = first->next;
-    head->len--;
-    if (head->len == 0)
-        head->last = NULL;
+    list->first = first->next;
+    list->len--;
+
+    if (list->len == 0)
+        *list = NETLIST_INIT;
 
     free(first);
     return 0;
 }
 
-static void netlist_clear(struct netlist_head *head)
+/**
+ * @brief Removes all elements from the @p list.
+ * 
+ * @param list The list to clear.
+ */
+static void netlist_clear(struct netlist *list)
 {
-    NETLIST_HEAD_GUARD(head);
-    while (netlist_pop_front(head, NULL) == 0)
+    NETLIST_HEAD_GUARD(list);
+
+    while (netlist_pop_front(list, NULL) == 0)
         ;
 }
 

@@ -167,8 +167,8 @@ static void free_args(struct args *args)
 }
 
 static int parse_networks(const char *sources_filename,
-                          struct netlist_head *head,
-                          struct netlist_head *parent_networks)
+                          struct netlist *head,
+                          struct netlist *parent_networks)
 {
     FILE *sources = fopen(sources_filename, "r");
     if (!sources) {
@@ -200,15 +200,14 @@ static int parse_networks(const char *sources_filename,
         case 0:
             if (parent_networks) {
                 struct netlist_elem *elem;
-                NETLIST_LOOP(parent_networks, elem)
-                {
+                NETLIST_LOOP(parent_networks, elem) {
                     if (net_contains(&elem->net, &entry.address) == 0)
                         goto ok;
                 }
                 PARSE_ERROR("not contained in parent networks, skipping");
                 continue;
             }
-        ok:
+ok:
             if (netlist_push_back(head, &entry) < 0) {
                 fprintf(stderr, "Failed to add network entry to the list!\n");
                 return -1;
@@ -266,7 +265,7 @@ cleanup:
     return -1;
 }
 
-static int update_networks(struct bpf_map *map, struct netlist_head *list_head)
+static int update_networks(struct bpf_map *map, struct netlist *list_head)
 {
     struct network entry;
     net_index counter = 0;
@@ -290,8 +289,7 @@ static int update_networks(struct bpf_map *map, struct netlist_head *list_head)
 }
 
 static int load_networks(const char *filename, struct bpf_map *map,
-                         struct netlist_head *head,
-                         struct netlist_head *parent_networks)
+                            struct netlist *head, struct netlist *parent_networks)
 {
     if (parse_networks(filename, head, parent_networks) < 0)
         return -1;
@@ -341,19 +339,19 @@ static struct traceroute *traceroute_init(const struct args *args)
         }
     }
 
-    struct netlist_head sources = NETLIST_INIT;
+    struct netlist sources = NETLIST_INIT;
     if (args->sources_filename) {
         if (load_networks(args->sources_filename,
-                          traceroute->maps.allowed_sources, &sources, NULL) < 0)
+                             traceroute->maps.allowed_sources, &sources, NULL) < 0)
             goto err;
     }
 
-    struct netlist_head indirect_sources = NETLIST_INIT;
+    struct netlist indirect_sources = NETLIST_INIT;
     if (args->indirect_sources_filename) {
         if (traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED) {
             if (load_networks(args->indirect_sources_filename,
-                              traceroute->maps.allowed_sources_multipart,
-                              &indirect_sources, &sources) < 0) {
+                                 traceroute->maps.allowed_sources_multipart,
+                                 &indirect_sources, &sources) < 0) {
                 netlist_clear(&sources);
                 goto err;
             }
