@@ -34,8 +34,7 @@ static int parse_cidr(int addr_family, const char *str, struct network *net)
     char *address_start = strtok(cidr, "/");
     char *prefixlen_start = strtok(NULL, "/");
 
-    if (!prefixlen_start) {
-        // PARSE_ERROR("expected a network in CIDR notation");
+    if (!prefixlen_start || strtok(NULL, "/")) {
         free(cidr);
         return -CIDR_ERR_FORMAT;
     }
@@ -43,7 +42,6 @@ static int parse_cidr(int addr_family, const char *str, struct network *net)
     char *endptr;
     unsigned long prefixlen = strtoul(prefixlen_start, &endptr, 0);
     if (*endptr != '\0' || endptr == prefixlen_start) {
-        // PARSE_ERROR("invalid prefix length");
         free(cidr);
         return -CIDR_ERR_PREFIX;
     }
