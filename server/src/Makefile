@@ -1,3 +1,23 @@
+
+ifndef TRACEROUTE_AF
+
+.PHONY: recurse
+recurse:
+	$(MAKE) TRACEROUTE_AF=TRACEROUTE_V4 $(MAKECMDGOALS)
+	$(MAKE) TRACEROUTE_AF=TRACEROUTE_V6 $(MAKECMDGOALS)
+
+-include recurse
+
+.PHONY: clean
+clean::
+	rm -rf build
+
+.PHONY: format
+format:
+	clang-format -i -style=file:.clang_format `find . -type f -name "*.[ch]" ! -name "utest.h"`
+
+else
+
 ifeq ($(TRACEROUTE_AF), TRACEROUTE_V4)
 
 $(info **************************)
@@ -14,20 +34,9 @@ suffix = v6
 
 else
 
-ifdef TRACEROUTE_AF
 $(error TRACEROUTE_AF must be set to TRACEROUTE_V4|TRACEROUTE_V6)
+
 endif
-
-.PHONY: recurse
-recurse:
-	$(MAKE) TRACEROUTE_AF=TRACEROUTE_V4 $(MAKECMDGOALS)
-	$(MAKE) TRACEROUTE_AF=TRACEROUTE_V6 $(MAKECMDGOALS)
-
--include recurse
-endif
-
-
-ifdef TRACEROUTE_AF
 
 BPF_DIR := bpf
 BPF_PROG := $(BPF_DIR)/traceroute.o
@@ -71,16 +80,8 @@ $(test):
 
 .PHONY: clean
 clean::
-	-rm $(server) $(test)
+	rm -f $(server) $(test)
 
-else
-
-.PHONY: clean
-clean::
-	-rm -r build
-
-.PHONY: format
-format:
-	clang-format -i -style=file:.clang_format `find . -type f -name "*.[ch]" ! -name "utest.h"`
 
 endif
+
