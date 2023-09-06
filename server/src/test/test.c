@@ -1,5 +1,6 @@
 #include "utest.h"
 #include "../cidr.h"
+#include "../netlist.h"
 #include "string.h"
 
 #if defined(TRACEROUTE_V4)
@@ -71,4 +72,49 @@ UTEST(cidr, parse_cidr)
             ASSERT_TRUE(mask_eq);
         }
     }
+}
+
+
+
+static struct netlist list = NETLIST_INIT;
+
+UTEST(netlist, netlist_push_back)
+{
+	for (int i = 1; i <= 10; i++) {
+		struct network dummy = {};
+		memset(&dummy, i, 1);
+
+		netlist_push_back(&list, &dummy);
+		ASSERT_EQ(list.len, i);
+	}
+}
+
+UTEST(netlist, netlist_loop)
+{
+	int counter = 0;
+	struct netlist_elem *elem;
+
+	NETLIST_LOOP(&list, elem) {
+		counter++;
+		ASSERT_EQ(*(char *)elem, counter);
+	}
+
+	ASSERT_EQ(list.len, counter);
+}
+
+UTEST(netlist, netlist_pop_front)
+{
+	ASSERT_GT(list.len, 0);
+
+	struct network out;
+
+	int expected = 1;
+	for (int i = list.len - 1; i >= 0; i--) {
+		netlist_pop_front(&list, &out);
+		ASSERT_EQ(list.len, i);
+		ASSERT_EQ(*(char *)&out, expected++);
+	}
+
+	int is_reset = !memcmp(&list, &NETLIST_INIT, sizeof(list));
+	ASSERT_TRUE(is_reset);
 }
