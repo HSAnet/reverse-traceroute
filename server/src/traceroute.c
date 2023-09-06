@@ -168,7 +168,7 @@ static void free_args(struct args *args)
 
 static int parse_networks(const char *sources_filename,
                           struct netlist *networks,
-                          struct netlist *parent_networks)
+                          struct netlist *excludes)
 {
     FILE *sources = fopen(sources_filename, "r");
     if (!sources) {
@@ -198,14 +198,14 @@ static int parse_networks(const char *sources_filename,
         struct network entry;
         switch (parse_cidr(ADDR_FAMILY, line, &entry)) {
         case 0:
-            if (parent_networks) {
+            if (excludes) {
                 struct netlist_elem *elem;
-                NETLIST_LOOP(parent_networks, elem)
+                NETLIST_LOOP(excludes, elem)
                 {
                     if (net_contains(&elem->net, &entry.address) == 0)
                         goto ok;
                 }
-                PARSE_ERROR("not contained in parent networks, skipping");
+                PARSE_ERROR("not contained in excludes, skipping");
                 continue;
             }
         ok:
@@ -291,9 +291,9 @@ static int update_networks(struct bpf_map *map, struct netlist *networks)
 
 static int load_networks(const char *filename, struct bpf_map *map,
                          struct netlist *networks,
-                         struct netlist *parent_networks)
+                         struct netlist *excludes)
 {
-    if (parse_networks(filename, networks, parent_networks) < 0)
+    if (parse_networks(filename, networks, excludes) < 0)
         return -1;
 
     // When no networks were found (empty file) don't resize the map.
