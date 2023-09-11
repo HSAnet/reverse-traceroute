@@ -1,0 +1,5 @@
+augsburg-traceroute-server (0.02.0-1) jammy; urgency=low
+
+  * Initial release.
+
+ -- Valentin Heinrich <v.heinrich99@gmail.com>  Mon, 24 Jul 2023 19:50:29 +0200
