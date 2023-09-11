@@ -4,8 +4,8 @@ ifndef TRACEROUTE_AF
 
 .PHONY: recurse
 recurse:
-	$(MAKE) TRACEROUTE_AF=TRACEROUTE_V4 $(MAKECMDGOALS)
-	$(MAKE) TRACEROUTE_AF=TRACEROUTE_V6 $(MAKECMDGOALS)
+	-@$(MAKE) TRACEROUTE_AF=TRACEROUTE_V4 $(MAKECMDGOALS)
+	-@$(MAKE) TRACEROUTE_AF=TRACEROUTE_V6 $(MAKECMDGOALS)
 
 -include recurse
 
@@ -76,7 +76,7 @@ $(BUILD_DIR) $(BPF_BUILD_DIR) $(SKELETON_DIR) $(OUTDIR):
 .PHONY: test $(test)
 test: $(test)
 $(test):	
-	$(CLANG) -Wall $(INCLUDES) -D$(TRACEROUTE_AF) test/test.c -o $@
+	$(CLANG) $(INCLUDES) -D$(TRACEROUTE_AF) test/test.c -o $@
 	$(test)
 
 .PHONY: clean
@@ -85,4 +85,3 @@ clean::
 
 
 endif
-
