@@ -108,13 +108,13 @@ class ClassicProbeGen(AbstractProbeGen):
 class ReverseProbeGen(AbstractProbeGen):
     """Implements reverse traceroute functionality."""
 
-    class Error(Exception):
-        pass
-
-    class NotSupportedException(Error):
+    class NotSupportedException(Exception):
         def __str__(self):
             return "The target does not support reverse traceroute"
 
+    class Error(Exception):
+        pass
+    
     class InvalidTtlException(Error):
         def __str__(self):
             return "The target does not support the specified Time-To-Live (TTL)"
@@ -129,7 +129,7 @@ class ReverseProbeGen(AbstractProbeGen):
 
     class MultipartNotSupportedException(Error):
         def __str__(self):
-            return "The target does not support indirect forwarding."
+            return "The target does not support the requested extension."
 
     STATUS_TO_EXCEPTION = {
         1: InvalidTtlException,

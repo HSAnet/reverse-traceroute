@@ -19,6 +19,7 @@ import logging
 import argparse
 import json
 import socket
+import sys
 from itertools import compress
 from ipaddress import ip_address, IPv4Address, IPv6Address
 from concurrent.futures import ThreadPoolExecutor
@@ -228,7 +229,7 @@ def main():
 
     valid, target_addr = try_resolve_host(args.target, (args.ipv4, args.ipv6))
     if not valid:
-        exit()
+        sys.exit()
 
     engine = create_probing_engine(args)
     traces = {}
@@ -247,7 +248,7 @@ def main():
                 af_selector = (is_ipv4, not is_ipv4)
                 valid, forward_to = try_resolve_host(args.forward_to, af_selector)
                 if not valid:
-                    exit()
+                    sys.exit()
             else:
                 forward_to = None
 
@@ -262,14 +263,14 @@ def main():
         resp = sr1(req, retry=3, timeout=args.timeout, verbose=0)
         if not resp:
             log.error("The target did not respond to the reverse traceroute probe.")
-            exit()
+            sys.exit()
         try:
             probe_gen.parse_probe_response(req, resp)
-        except ReverseProbeGen.Error:
+        except ReverseProbeGen.InvalidTtlException:
             pass
         except Exception as e:
             logging.error(e)
-            exit()
+            sys.exit()
 
         root = discover(engine, probe_gen, target_addr, args.min_ttl, args.max_ttl)
         traces["reverse"] = root
