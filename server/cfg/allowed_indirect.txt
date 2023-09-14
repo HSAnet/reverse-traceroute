@@ -1,0 +1,3 @@
+# Enter allowed networks that may request indirect traces in CIDR notation below.
+# If the general whitelist in 'allowed.txt' is not empty, the networks defined in
+# this file must be contained in one of the networks in 'allowed.txt' to take effect.

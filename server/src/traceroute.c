@@ -38,15 +38,21 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #define FILTER_HANDLE 0xbeaf4
 #define ADDRSTRLEN    INET_ADDRSTRLEN
 #define ADDR_FAMILY   AF_INET
+#define AF_STR        "v4"
 #elif defined(TRACEROUTE_V6)
 #define FILTER_HANDLE 0xbeaf6
 #define ADDRSTRLEN    INET6_ADDRSTRLEN
 #define ADDR_FAMILY   AF_INET6
+#define AF_STR        "v6"
 #endif
 #define FILTER_PRIO 1
 struct args {
     // Always specified by the user
     int ifindex;
+
+    // Defaults to config file in /etc
+    char *sources_filename;
+    char *indirect_sources_filename;
 
     // Optional arguments, 0 if not specified
     int indirect_enabled;
@@ -57,9 +63,6 @@ struct args {
 
     __u64 timeout_ns;
     __u32 max_elem;
-
-    char *sources_filename;
-    char *indirect_sources_filename;
 };
 
 const char *fmt_help_message =
@@ -81,6 +84,10 @@ const char *fmt_help_message =
 static int parse_args(int argc, char **argv, struct args *args)
 {
     memset(args, 0, sizeof(*args));
+    args->sources_filename =
+        strdup("/etc/augsburg-traceroute-server/" AF_STR "/allowed.txt");
+    args->indirect_sources_filename =
+        strdup("/etc/augsburg-traceroute-server/" AF_STR "/allowed_indirect.txt");
 
     struct option long_opts[] = {
         {"indirect", no_argument, &args->indirect_enabled, 1},
@@ -340,25 +347,21 @@ static struct traceroute *traceroute_init(const struct args *args)
     }
 
     struct netlist sources = NETLIST_INIT;
-    if (args->sources_filename) {
-        if (load_networks(args->sources_filename,
-                          traceroute->maps.allowed_sources, &sources, NULL) < 0)
-            goto err;
-    }
+    if (load_networks(args->sources_filename, traceroute->maps.allowed_sources,
+                      &sources, NULL) < 0)
+        goto err;
 
     struct netlist indirect_sources = NETLIST_INIT;
-    if (args->indirect_sources_filename) {
-        if (traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED) {
-            if (load_networks(args->indirect_sources_filename,
-                              traceroute->maps.allowed_sources_multipart,
-                              &indirect_sources, &sources) < 0) {
-                netlist_clear(&sources);
-                goto err;
-            }
-        } else {
-            fprintf(stderr, "Indirect tracing is disabled, ignoring the "
-                            "'--indirect-sources-from' argument\n");
+    if (traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED) {
+        if (load_networks(args->indirect_sources_filename,
+                          traceroute->maps.allowed_sources_multipart,
+                          &indirect_sources, &sources) < 0) {
+            netlist_clear(&sources);
+            goto err;
         }
+    } else {
+        fprintf(stderr, "Indirect tracing is disabled, ignoring the "
+                        "'--indirect-sources-from' argument\n");
     }
 
     if (traceroute__load(traceroute) < 0) {
