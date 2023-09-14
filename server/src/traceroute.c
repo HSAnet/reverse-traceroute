@@ -54,46 +54,37 @@ struct args {
     char *sources_filename;
     char *indirect_sources_filename;
 
-    // Optional arguments, 0 if not specified
+    // Optional arguments
+    int indirect_set;
     int indirect_enabled;
-    int indirect_disabled;
 
+    int tcp_syn_set;
     int tcp_syn_enabled;
-    int tcp_syn_disabled;
 
-    __u64 timeout_ns;
-    __u32 max_elem;
+    // 0 if not specified
+    int timeout_ns;
+    int max_elem;
 };
 
 const char *fmt_help_message =
     "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES]\n"
-    "\t\t[--[no-]indirect] [--[no-]tcp-syn-probes]\n"
-    "\t\t[--allow-from FILENAME] [--allow-indirect-from FILENAME] ifname\n"
+    "\t\t[--indirect=yes|no] [--tcp-syn-probes=yes|no]\n"
     "\n"
     "\t-t: The time after which a session expires, in nanoseconds.\n"
     "\t-n: The maximum number of sessions the server can handle.\n"
-    "\t--[no-]indirect: Whether or not the client is allowed to choose the "
+    "\t--indirect: Whether or not the client is allowed to choose the "
     "trace target.\n"
-    "\t--[no-]tcp-syn-probes: Whether or not TCP probes are sent with the SYN "
-    "flag set.\n"
-    "\t--allow-from: The filename that contains allowed networks in CIDR "
-    "notation for traceroute requests.\n"
-    "\t--allow-indirect-from: The filename that contains allowed networks in "
-    "CIDR notation for indirect traceroute requests.\n";
+    "\t--tcp-syn-probes: Whether or not TCP probes are sent with the SYN "
+    "flag set.\n";
 
 static int parse_args(int argc, char **argv, struct args *args)
 {
     memset(args, 0, sizeof(*args));
-    args->sources_filename =
-        strdup("/etc/augsburg-traceroute-server/" AF_STR "/allowed.txt");
-    args->indirect_sources_filename =
-        strdup("/etc/augsburg-traceroute-server/" AF_STR "/allowed_indirect.txt");
 
     struct option long_opts[] = {
-        {"indirect", no_argument, &args->indirect_enabled, 1},
-        {"no-indirect", no_argument, &args->indirect_disabled, 1},
-        {"tcp-syn-probes", no_argument, &args->tcp_syn_enabled, 1},
-        {"no-tcp-syn-probes", no_argument, &args->tcp_syn_disabled, 1},
+        {"indirect", required_argument, &args->indirect_set, 1},
+        {"tcp-syn-probes", required_argument, &args->tcp_syn_set, 1},
+
         {"allow-from", required_argument, 0, 's'},
         {"allow-indirect-from", required_argument, 0, 'i'},
         {0, 0, 0, 0}};
@@ -104,9 +95,35 @@ static int parse_args(int argc, char **argv, struct args *args)
                                     &option_index)) != -1) {
         switch (option_id) {
         // Long option encountered
-        case 0:
-            continue;
-        // Allowed sources filename
+        case 0:;
+            int is_set;
+
+            if (strcmp(optarg, "yes") == 0) {
+                is_set = 1;
+            } else if (strcmp(optarg, "no") == 0) {
+                is_set = 0;
+            } else {
+                fprintf(stderr,
+                        "Option '%s' expects 'yes|no' as the argument.\n",
+                        long_opts[option_index].name);
+                goto help;
+            }
+
+            switch (option_index) {
+            case 0:
+                args->indirect_enabled = is_set;
+                break;
+            case 1:
+                args->tcp_syn_enabled = is_set;
+                break;
+            default:
+                fprintf(stderr, "Unhandled option '%s'.\n",
+                        long_opts[option_index].name);
+                goto help;
+            }
+
+            break;
+        // Allowed indirect sources filename
         case 's':
             args->sources_filename = strdup(optarg);
             break;
@@ -135,16 +152,12 @@ static int parse_args(int argc, char **argv, struct args *args)
         };
     }
 
-    if (args->indirect_disabled && args->indirect_enabled) {
-        fprintf(stderr, "The '--indirect' and '--no-indirect' flags are "
-                        "mutually exclusive!\n");
-        goto help;
-    }
-    if (args->tcp_syn_disabled && args->tcp_syn_enabled) {
-        fprintf(stderr, "The '--tcp-syn-probes' and '--no-tcp-syn-probes' "
-                        "flags are mutually exclusive!\n");
-        goto help;
-    }
+    if (!args->sources_filename)
+        args->sources_filename =
+            strdup("/etc/augsburg-traceroute-server/" AF_STR "/allowed.txt");
+    if (!args->indirect_sources_filename)
+        args->indirect_sources_filename = strdup(
+            "/etc/augsburg-traceroute-server/" AF_STR "/allowed_indirect.txt");
 
     if (optind == argc - 1) {
         int index = if_nametoindex(argv[optind]);
@@ -167,23 +180,13 @@ help:
 
 static void free_args(struct args *args)
 {
-    if (args->sources_filename)
-        free(args->sources_filename);
-    if (args->indirect_sources_filename)
-        free(args->indirect_sources_filename);
+    free(args->sources_filename);
+    free(args->indirect_sources_filename);
 }
 
-static int parse_networks(const char *sources_filename,
-                          struct netlist *networks, struct netlist *parents)
+static int parse_networks(FILE *sources, struct netlist *networks,
+                          struct netlist *parents)
 {
-    FILE *sources = fopen(sources_filename, "r");
-    if (!sources) {
-        fprintf(stderr, "Failed to open '%s'!\n", sources_filename);
-        return -1;
-    }
-    fprintf(stderr, "Attempting to read network entries from '%s'\n",
-            sources_filename);
-
     ssize_t nread;
     size_t line_size = 0, nentries = 0, nlines = 0;
     char *line = NULL;
@@ -247,23 +250,13 @@ static int parse_networks(const char *sources_filename,
     }
 
     free(line);
-    fclose(sources);
 
     if (errno) {
         perror("getline: ");
         goto cleanup;
     }
-    if (networks->len != nentries) {
-        fprintf(stderr, "Errors encountered while parsing '%s'\n",
-                sources_filename);
+    if (networks->len != nentries)
         goto cleanup;
-    }
-
-    if (nentries == 0)
-        fprintf(stderr, "No network entries found in '%s'\n", sources_filename);
-    else
-        fprintf(stderr, "Loaded %ld network entries from '%s'\n", networks->len,
-                sources_filename);
 
     return nentries;
 
@@ -294,17 +287,18 @@ static int update_networks(struct bpf_map *map, struct netlist *networks)
 
     return 0;
 }
-
-static int load_networks(const char *filename, struct bpf_map *map,
+static int load_networks(FILE *sources, struct bpf_map *map,
                          struct netlist *networks, struct netlist *parents)
 {
-    if (parse_networks(filename, networks, parents) < 0)
+    if (parse_networks(sources, networks, parents) < 0)
         return -1;
 
     // When no networks were found (empty file) don't resize the map.
     // In that case we still want to rely on the default values.
-    if (networks->len == 0)
+    if (networks->len == 0) {
+        fprintf(stderr, "No network entries found, allowing requests from all addresses!\n");
         return 0;
+    }
 
     if (bpf_map__set_max_entries(map, networks->len) < 0) {
         netlist_clear(networks);
@@ -313,6 +307,27 @@ static int load_networks(const char *filename, struct bpf_map *map,
 
     fprintf(stderr, "Resized map to %zu entries\n", networks->len);
     return 0;
+}
+static int load_networks_from_path(char *sources_filename, struct bpf_map *map,
+                                   struct netlist *networks,
+                                   struct netlist *parents)
+{
+    fprintf(stderr, "Attempting to read network entries from '%s'\n",
+            sources_filename);
+
+    FILE *sources = fopen(sources_filename, "r");
+    if (!sources) {
+        fprintf(stderr, "Failed to open file!\n");
+        return -1;
+    }
+
+    int ret = load_networks(sources, map, networks, parents);
+    fclose(sources);
+
+    if (ret < 0)
+	    fprintf(stderr, "Detected errors while parsing '%s'\n", sources_filename);
+
+    return ret;
 }
 
 static struct traceroute *traceroute_init(const struct args *args)
@@ -324,15 +339,12 @@ static struct traceroute *traceroute_init(const struct args *args)
         return NULL;
     }
 
-    if (args->indirect_enabled)
-        traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED = 1;
-    else if (args->indirect_disabled)
-        traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED = 0;
+    if (args->indirect_set)
+        traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED =
+            args->indirect_enabled;
 
-    if (args->tcp_syn_enabled)
-        traceroute->rodata->CONFIG_TCP_SYN_ENABLED = 1;
-    else if (args->tcp_syn_disabled)
-        traceroute->rodata->CONFIG_TCP_SYN_ENABLED = 0;
+    if (args->tcp_syn_set)
+        traceroute->rodata->CONFIG_TCP_SYN_ENABLED = args->tcp_syn_enabled;
 
     if (args->timeout_ns)
         traceroute->rodata->CONFIG_TIMEOUT_NS = args->timeout_ns;
@@ -347,21 +359,22 @@ static struct traceroute *traceroute_init(const struct args *args)
     }
 
     struct netlist sources = NETLIST_INIT;
-    if (load_networks(args->sources_filename, traceroute->maps.allowed_sources,
-                      &sources, NULL) < 0)
+    if (load_networks_from_path(args->sources_filename,
+                                traceroute->maps.allowed_sources, &sources,
+                                NULL) < 0)
         goto err;
 
     struct netlist indirect_sources = NETLIST_INIT;
     if (traceroute->rodata->CONFIG_INDIRECT_TRACE_ENABLED) {
-        if (load_networks(args->indirect_sources_filename,
-                          traceroute->maps.allowed_sources_multipart,
-                          &indirect_sources, &sources) < 0) {
+        if (load_networks_from_path(args->indirect_sources_filename,
+                                    traceroute->maps.allowed_sources_multipart,
+                                    &indirect_sources, &sources) < 0) {
             netlist_clear(&sources);
             goto err;
         }
     } else {
         fprintf(stderr, "Indirect tracing is disabled, ignoring the "
-                        "'--indirect-sources-from' argument\n");
+                        "'--allow-indirect-from' argument\n");
     }
 
     if (traceroute__load(traceroute) < 0) {
@@ -452,7 +465,6 @@ int main(int argc, char **argv)
 
     tr = traceroute_init(&args);
     free_args(&args);
-
     if (!tr)
         goto exit;
 
