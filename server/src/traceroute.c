@@ -45,7 +45,9 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #define ADDR_FAMILY   AF_INET6
 #define AF_STR        "v6"
 #endif
+
 #define FILTER_PRIO 1
+
 struct args {
     // Always specified by the user
     int ifindex;
@@ -77,6 +79,14 @@ const char *fmt_help_message =
     "\t--tcp-syn-probes: Whether or not TCP probes are sent with the SYN "
     "flag set.\n";
 
+static void free_args(struct args *args)
+{
+    if (args->sources_filename)
+        free(args->sources_filename);
+    if (args->indirect_sources_filename)
+        free(args->indirect_sources_filename);
+}
+
 static int parse_args(int argc, char **argv, struct args *args)
 {
     memset(args, 0, sizeof(*args));
@@ -91,6 +101,8 @@ static int parse_args(int argc, char **argv, struct args *args)
 
     char *endptr;
     int option_id, option_index = 0;
+    errno = 0;
+
     while ((option_id = getopt_long(argc, argv, "t:n:h", long_opts,
                                     &option_index)) != -1) {
         switch (option_id) {
@@ -125,10 +137,16 @@ static int parse_args(int argc, char **argv, struct args *args)
             break;
         // Allowed indirect sources filename
         case 's':
+            // Close memleak when invoking this argument multiple times
+            if (args->sources_filename)
+                free(args->sources_filename);
             args->sources_filename = strdup(optarg);
             break;
         // Allowed indirect sources filename
         case 'i':
+            // Close memleak when invoking this argument multiple times
+            if (args->indirect_sources_filename)
+                free(args->indirect_sources_filename);
             args->indirect_sources_filename = strdup(optarg);
             break;
         // Timeout
@@ -159,6 +177,13 @@ static int parse_args(int argc, char **argv, struct args *args)
         args->indirect_sources_filename = strdup(
             "/etc/augsburg-traceroute-server/" AF_STR "/allowed_indirect.txt");
 
+    // Somewhere along the way strdup might fail, setting errno
+    if (errno) {
+        free_args(args);
+        perror("Unexpected error while parsing arguments:");
+        return -1;
+    }
+
     if (optind == argc - 1) {
         int index = if_nametoindex(argv[optind]);
         if (!index) {
@@ -176,12 +201,6 @@ static int parse_args(int argc, char **argv, struct args *args)
 help:
     fprintf(stderr, fmt_help_message, argv[0]);
     return -1;
-}
-
-static void free_args(struct args *args)
-{
-    free(args->sources_filename);
-    free(args->indirect_sources_filename);
 }
 
 static int parse_networks(FILE *sources, struct netlist *networks,
@@ -296,7 +315,8 @@ static int load_networks(FILE *sources, struct bpf_map *map,
     // When no networks were found (empty file) don't resize the map.
     // In that case we still want to rely on the default values.
     if (networks->len == 0) {
-        fprintf(stderr, "No network entries found, allowing requests from all addresses!\n");
+        fprintf(stderr, "No network entries found, allowing requests from all "
+                        "addresses!\n");
         return 0;
     }
 
@@ -325,7 +345,8 @@ static int load_networks_from_path(char *sources_filename, struct bpf_map *map,
     fclose(sources);
 
     if (ret < 0)
-	    fprintf(stderr, "Detected errors while parsing '%s'\n", sources_filename);
+        fprintf(stderr, "Detected errors while parsing '%s'\n",
+                sources_filename);
 
     return ret;
 }
