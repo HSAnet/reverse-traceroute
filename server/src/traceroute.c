@@ -71,13 +71,19 @@ struct args {
 const char *fmt_help_message =
     "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES]\n"
     "\t\t[--indirect=yes|no] [--tcp-syn-probes=yes|no]\n"
+    "\t\t[--allow-from=filepath] [--allow-indirect-from=filepath]\n"
     "\n"
     "\t-t: The time after which a session expires, in nanoseconds.\n"
     "\t-n: The maximum number of sessions the server can handle.\n"
     "\t--indirect: Whether or not the client is allowed to choose the "
     "trace target.\n"
     "\t--tcp-syn-probes: Whether or not TCP probes are sent with the SYN "
-    "flag set.\n";
+    "flag set.\n"
+    "\t--allow-from: The path to a file containing IP networks that are "
+    "allowed to request reverse-traceroute measurements.\n"
+    "\t--allow-indirect-from: The path to a file containing IP networks that "
+    "are allowed to set the reverse-traceroute target.\n"
+    "\t\tOnly effective when used together with the --indirect flag.\n";
 
 static void free_args(struct args *args)
 {
