@@ -141,14 +141,14 @@ class ReverseProbeGen(AbstractProbeGen):
         4: MultipartNotSupportedException,
     }
 
-    def __init__(self, target: str, protocol: str, forward_to: str):
+    def __init__(self, target: str, protocol: str, forward_to: str | None):
         super().__init__(target, protocol)
         # Reuse identifiers which were answered by the server.
         # This reduces the number of entries to be maintained by a client-sided NAPT middlebox.
         # By using the last reclaimed identifier first (LIFO), we maximize the likelihood of
         # hitting an active NAPT entry, which eliminates the overhead to create a new one.
         self._reclaimed_identifiers = []
-        self._forward_to = forward_to if target != forward_to else None
+        self._forward_to = forward_to
 
     def create_probe(self, ttl: int, flow: int) -> Packet:
         protocol = {

@@ -241,7 +241,7 @@ def main():
             if not target_addr:
                 sys.exit()
 
-        probe_gen = ReverseProbeGen(remote_addr, args.protocol, remote_addr)
+        probe_gen = ReverseProbeGen(remote_addr, args.protocol, target_addr)
 
         # By requesting a probe with a TTL of 0 an error condition is created.
         # A reverse traceroute server will reply with a status code 1,
