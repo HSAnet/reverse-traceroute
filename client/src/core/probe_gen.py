@@ -38,6 +38,7 @@ TracerouteResult = namedtuple("TracerouteResult", ["address", "rtt"])
 # This is the default outgoing source port for classic probes.
 TRACEROUTE_PORT = 33434
 
+
 class AbstractProbeGen:
     def __init__(self, target: str, protocol: str):
         self.is_ipv4 = isinstance(ip_address(target), IPv4Address)
@@ -89,7 +90,9 @@ class ClassicProbeGen(AbstractProbeGen):
                 )
 
         elif self.protocol == "udp":
-            l3 = UDP(dport=flow, sport=TRACEROUTE_PORT, chksum=probe_id) / struct.pack("!H", 0)
+            l3 = UDP(dport=flow, sport=TRACEROUTE_PORT, chksum=probe_id) / struct.pack(
+                "!H", 0
+            )
             l3.load = struct.pack("!H", self.chksum(socket.IPPROTO_UDP, ip, bytes(l3)))
 
         elif self.protocol == "tcp":
@@ -114,7 +117,7 @@ class ReverseProbeGen(AbstractProbeGen):
 
     class Error(Exception):
         pass
-    
+
     class InvalidTtlException(Error):
         def __str__(self):
             return "The target does not support the specified Time-To-Live (TTL)"
@@ -138,14 +141,14 @@ class ReverseProbeGen(AbstractProbeGen):
         4: MultipartNotSupportedException,
     }
 
-    def __init__(self, target: str, protocol: str, forward_to: [None|str]):
+    def __init__(self, target: str, protocol: str, forward_to: str):
         super().__init__(target, protocol)
         # Reuse identifiers which were answered by the server.
         # This reduces the number of entries to be maintained by a client-sided NAPT middlebox.
         # By using the last reclaimed identifier first (LIFO), we maximize the likelihood of
         # hitting an active NAPT entry, which eliminates the overhead to create a new one.
         self._reclaimed_identifiers = []
-        self._forward_to = forward_to
+        self._forward_to = forward_to if target != forward_to else None
 
     def create_probe(self, ttl: int, flow: int) -> Packet:
         protocol = {

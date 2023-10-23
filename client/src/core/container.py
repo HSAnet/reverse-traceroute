@@ -127,8 +127,10 @@ class TracerouteVertex:
 
             if vertex in path:
                 match on_loop:
-                    case "break": return
-                    case "yield": yield path
+                    case "break":
+                        return
+                    case "yield":
+                        yield path
                     case "skip":
                         loop_start = path.index(vertex)
                         # When traversing a merged graph, the same address refers to the same object.
@@ -180,7 +182,8 @@ class TracerouteVertex:
         """Merges duplicate vertices encountered in a trace.
         Duplicates vertices can occur in the presence of Unequal-Cost-Load-Balancing.
         This method can create hard loops, traverse the sequence with care.
-        It is recommended to use the 'paths' method, which can deal with loops in a configurable way."""
+        It is recommended to use the 'paths' method, which can deal with loops in a configurable way.
+        """
         buckets = [list(g) for k, g in groupby(sorted(self.flatten(), key=hash))]
         reduced_buckets = [reduce(lambda a, b: a._merge(b), group) for group in buckets]
 
@@ -267,7 +270,7 @@ class TracerouteHop(HashSet):
     def first(self) -> TracerouteVertex:
         return next(iter(self))
 
-    def connectTo(self, other: TracerouteVertex):
+    def connectTo(self, other: "TracerouteHop"):
         assert isinstance(other, TracerouteHop)
         new_links = 0
 
