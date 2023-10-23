@@ -64,8 +64,8 @@ struct args {
     int tcp_syn_enabled;
 
     // 0 if not specified
-    int timeout_ns;
-    int max_elem;
+    unsigned long timeout_ns;
+    unsigned long max_elem;
 };
 
 const char *fmt_help_message =
@@ -379,7 +379,7 @@ static struct traceroute *traceroute_init(const struct args *args)
     if (args->max_elem) {
         if (bpf_map__set_max_entries(traceroute->maps.sessions,
                                      args->max_elem) < 0) {
-            fprintf(stderr, "Failed to set maximum number of sessions to %u!\n",
+            fprintf(stderr, "Failed to set maximum number of sessions to %lu!\n",
                     args->max_elem);
             goto err;
         }

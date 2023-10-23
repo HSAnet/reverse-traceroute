@@ -1,3 +1,9 @@
+augsburg-traceroute-server (0.02.0-4) jammy; urgency=medium
+
+  * Second attempt at fixing the bad argument parsing error.
+
+ -- Valentin Heinrich <valentin.heinrich@hs-augsburg.de>  Tue, 24 Oct 2023 00:00:56 +0200
+
 augsburg-traceroute-server (0.02.0-1) jammy; urgency=low
 
   * Initial release.
