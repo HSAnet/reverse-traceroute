@@ -2,21 +2,23 @@
 
 set -e
 
-poetry install
+export HOME=$(mktemp -d -p /var/tmp)
+export POETRY_HOME=$HOME/.local
+export PATH=$PATH:$POETRY_HOME/bin
 
+curl -sSL https://install.python-poetry.org | python3 -
 ROOT=$(pwd)
-VENV=$(poetry env info -p)
-PYTHON=$(poetry env info --executable)
 
 TEMPDIR=$(mktemp -d)
+cp -r * $TEMPDIR/
 (
 	cd "$TEMPDIR"
+	
+	poetry install
+	CLIENT=$(poetry run which augsburg-traceroute)
+	poetry run pyinstaller -F $CLIENT
 
-	ln -s "$ROOT/src"
-	ln -s "$ROOT" dist
-	ln -s "$VENV/bin/augsburg-traceroute"
-
-	"$PYTHON" -m PyInstaller -F augsburg-traceroute
+	cp -r dist/* $ROOT/
 )
 
 rm -r "$TEMPDIR"

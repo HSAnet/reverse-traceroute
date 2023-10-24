@@ -20,6 +20,7 @@ augsburg-traceroute = 'src.client:main'
 
 [tool.poetry.group.dev.dependencies]
 pyinstaller = {version = "^5.13.2", python = ">=3.10,<3.13"}
+black = "^23.10.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
