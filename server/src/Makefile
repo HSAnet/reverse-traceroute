@@ -116,8 +116,3 @@ endif
 
 .PHONY: distclean
 distclean: clean
-
-# Define rules without recipe for these targets.
-# Needed so that the dh_auto_* commands can find and execute them.
-.PHONY: test install uninstall
-test install uninstall:
