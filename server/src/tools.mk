@@ -21,7 +21,3 @@ $(BPFTOOL): | $(BPFTOOL_OUT_DIR)
 
 $(LIBBPF_OUT_DIR) $(BPFTOOL_OUT_DIR):
 	@mkdir -p $@
-
-.PHONY: clean
-clean::
-	rm -rf $(BIN)

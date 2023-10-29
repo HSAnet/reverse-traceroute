@@ -24,7 +24,7 @@ do_recurse:
 
 .PHONY: clean
 clean:
-	rm -rf build
+	rm -rf build bin
 
 .PHONY: format
 format:
@@ -86,8 +86,8 @@ $(test):
 	./$(test)
 
 
-
 include tools.mk
+
 INCLUDES += -Icommon
 CFLAGS = -Wall
 
@@ -108,7 +108,7 @@ $(BUILD_DIR) $(BPF_BUILD_DIR) $(SKELETON_DIR):
 
 
 .PHONY: clean
-clean::
+clean:
 	rm -f $(server) $(test)
 
 
