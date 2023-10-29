@@ -8,8 +8,5 @@ $(RESULT):
 	mkdir -p $@
 
 .PHONY: clean
-clean::
+clean:
 	rm -rf $(RESULT)
-
-.DEFAULT clean::
-	$(MAKE) -C src $@
