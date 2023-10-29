@@ -1,8 +1,8 @@
 [submodule "server/libbpf"]
-	path = server/libbpf
+	path = server/src/lib/libbpf
 	url = https://github.com/libbpf/libbpf
-    ignore = dirty
+    	ignore = dirty
 [submodule "server/bpftool"]
-	path = server/bpftool
+	path = server/src/lib/bpftool
 	url = https://github.com/libbpf/bpftool
-    ignore = dirty
+    	ignore = dirty

@@ -1,11 +1,11 @@
 BIN := $(abspath bin)
 
-LIBBPF_DIR := ../libbpf
+LIBBPF_DIR := lib/libbpf
 LIBBPF_SRC_DIR := $(LIBBPF_DIR)/src
 LIBBPF_OUT_DIR := $(BIN)/libbpf
 LIBBPF := $(LIBBPF_OUT_DIR)/libbpf.a
 
-BPFTOOL_DIR := ../bpftool
+BPFTOOL_DIR := lib/bpftool
 BPFTOOL_SRC_DIR := $(BPFTOOL_DIR)/src
 BPFTOOL_OUT_DIR := $(BIN)/bpftool
 BPFTOOL := $(BPFTOOL_OUT_DIR)/bpftool
