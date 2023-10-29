@@ -19,6 +19,7 @@ cp -r * $BASEDIR
 	debmake -yt
 	cd ../$PACKAGE-$VERSION
 
+	sudo pbuilder update
 	sudo pdebuild --buildresult $RESULT -- --use-network yes
 )
 
