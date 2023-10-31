@@ -104,9 +104,13 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
         return TC_ACT_SHOT;
 
     if (err_args.error == ERR_NONE) {
-        struct session_key session = SESSION_NEW_KEY(target, session_id);
+        __u16 global_id;
+        if (session_find_target_id(&target, &global_id) < 0)
+            return TC_ACT_SHOT;
+
+        struct session_key session = SESSION_NEW_KEY(target, global_id);
         struct session_state state =
-            SESSION_NEW_STATE(bpf_ktime_get_ns(), origin);
+            SESSION_NEW_STATE(bpf_ktime_get_ns(), origin, session_id);
         if (session_add(&session, &state) < 0)
             return TC_ACT_SHOT;
         goto redirect;
@@ -216,7 +220,7 @@ static tc_action handle(struct cursor *cursor)
             goto drop;
 
     struct response_args args = {
-        .session_id = session.identifier,
+        .session_id = state->local_identifier,
         .origin = state->origin,
     };
     struct response_payload_args payload_args = {

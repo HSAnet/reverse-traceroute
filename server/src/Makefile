@@ -28,7 +28,7 @@ clean:
 
 .PHONY: format
 format:
-	clang-format -i -style=file:.clang_format `find . -type f -name "*.[ch]" ! -name "utest.h" ! -path "./lib/*"`
+	clang-format -i -style=file:.clang_format `find . -type f -name "*.[ch]" ! -name "utest.h" ! -path "./lib/*" ! -path "./bin/*"`
 
 
 else

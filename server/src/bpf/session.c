@@ -104,3 +104,18 @@ INTERNAL int session_add(const struct session_key *session,
 err:
     return -1;
 }
+
+INTERNAL int session_find_target_id(const ipaddr_t *target, __u16 *out_id)
+{
+    struct session_key key =
+        SESSION_NEW_KEY(*target, (__u16)bpf_get_prandom_u32());
+
+    for (__u16 i = 0; i < 0xffff; i++) {
+        if (session_find(&key)) {
+            *out_id = key.identifier;
+            return 0;
+        }
+        key.identifier += 1;
+    }
+    return -1;
+}

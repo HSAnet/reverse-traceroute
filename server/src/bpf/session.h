@@ -26,15 +26,27 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 struct session_key {
     ipaddr_t target;
-    __be16 identifier;
+    __u16 identifier;
     __u16 padding;
 };
 
 struct session_state {
+#if defined(TRACEROUTE_V4)
     __u64 timestamp_ns;
     ipaddr_t origin;
-#if defined(TRACEROUTE_V4)
-    __u32 padding;
+    __be16 local_identifier;
+    struct {
+        __u16 pad_1;
+    } padding;
+#elif defined(TRACEROUTE_V6)
+    ipaddr_t origin;
+    __u64 timestamp_ns;
+    __be16 local_identifier;
+    struct {
+        __u16 pad_1;
+        __u16 pad_2;
+        __u16 pad_3;
+    } padding;
 #endif
 };
 
@@ -43,18 +55,13 @@ struct session_state {
         .padding = 0, .target = (x), .identifier = (y)                         \
     }
 
-#if defined(TRACEROUTE_V4)
-#define SESSION_NEW_STATE(x, y)                                                \
+#define SESSION_NEW_STATE(x, y, z)                                             \
     {                                                                          \
-        .padding = 0, .timestamp_ns = (x), .origin = (y)                       \
+        .padding = {0}, .timestamp_ns = (x), .origin = (y),                    \
+        .local_identifier = (z)                                                \
     }
-#elif defined(TRACEROUTE_V6)
-#define SESSION_NEW_STATE(x, y)                                                \
-    {                                                                          \
-        .timestamp_ns = (x), .origin = (y)                                     \
-    }
-#endif
 
+INTERNAL int session_find_target_id(const ipaddr_t *target, __u16 *out_id);
 INTERNAL int session_delete(const struct session_key *session);
 INTERNAL struct session_state *session_find(const struct session_key *key);
 INTERNAL int session_add(const struct session_key *session,

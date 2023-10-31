@@ -379,7 +379,8 @@ static struct traceroute *traceroute_init(const struct args *args)
     if (args->max_elem) {
         if (bpf_map__set_max_entries(traceroute->maps.sessions,
                                      args->max_elem) < 0) {
-            fprintf(stderr, "Failed to set maximum number of sessions to %lu!\n",
+            fprintf(stderr,
+                    "Failed to set maximum number of sessions to %lu!\n",
                     args->max_elem);
             goto err;
         }
