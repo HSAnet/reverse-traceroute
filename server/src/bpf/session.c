@@ -105,17 +105,42 @@ err:
     return -1;
 }
 
+#define LOOP_CTX_NEW(x, y)                                                     \
+    {                                                                          \
+        .start = (x), .found = 0, .target = (y)                                \
+    }
+struct loop_ctx {
+    const ipaddr_t target;
+    __u16 start;
+
+    __u16 identifier;
+    __u8 found;
+};
+
+static long callback(__u32 index, struct loop_ctx *ctx)
+{
+    __u16 identifier = ctx->start + (__u16)index;
+    struct session_key key = SESSION_NEW_KEY(ctx->target, identifier);
+
+    if (session_find(&key)) {
+        ctx->identifier = identifier;
+        ctx->found = 1;
+        return 1;
+    }
+
+    return 0;
+}
+
 INTERNAL int session_find_target_id(const ipaddr_t *target, __u16 *out_id)
 {
-    struct session_key key =
-        SESSION_NEW_KEY(*target, (__u16)bpf_get_prandom_u32());
+    struct loop_ctx ctx = LOOP_CTX_NEW(bpf_get_prandom_u32(), *target);
 
-    for (__u16 i = 0; i < 0xffff; i++) {
-        if (session_find(&key)) {
-            *out_id = key.identifier;
-            return 0;
-        }
-        key.identifier += 1;
+    if (bpf_loop(0xffff, callback, &ctx, 0) < 0)
+        return -1;
+    if (ctx.found) {
+        *out_id = ctx.identifier;
+        return 0;
     }
+
     return -1;
 }
