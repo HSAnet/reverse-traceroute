@@ -38,7 +38,7 @@ INTERNAL void log_message(enum message_type type, const struct session_key *key)
         return;
 
     msg->type = type;
-    msg->data.probe_id = bpf_ntohs(key->identifier);
+    msg->data.probe_id = key->identifier;
     msg->data.address = key->target;
 
     bpf_ringbuf_submit(msg, 0);
