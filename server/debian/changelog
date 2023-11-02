@@ -1,3 +1,15 @@
+augsburg-traceroute-server (0.2.1-1) jammy; urgency=medium
+
+  * Updated bpf loop logic.
+
+ -- Valentin Heinrich <valentin.heinrich@hs-augsburg.de>  Tue, 31 Oct 2023 13:15:11 +0100
+
+augsburg-traceroute-server (0.02.0-5) jammy; urgency=medium
+
+  * Introduced target-local identifiers.
+
+ -- Valentin Heinrich <valentin.heinrich@hs-augsburg.de>  Tue, 31 Oct 2023 12:17:52 +0100
+
 augsburg-traceroute-server (0.02.0-4) jammy; urgency=medium
 
   * Second attempt at fixing the bad argument parsing error.
