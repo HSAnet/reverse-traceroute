@@ -119,10 +119,11 @@ struct loop_ctx {
 
 static long callback(__u32 index, struct loop_ctx *ctx)
 {
-    __u16 identifier = ctx->start + (__u16)index;
+    __u16 identifier = ((ctx->start + index) % 0xffff) + 1;
     struct session_key key = SESSION_NEW_KEY(ctx->target, identifier);
 
-    if (session_find(&key)) {
+    if (!session_find(&key)) {
+        bpf_printk("Session ID found: %d\n", identifier);
         ctx->identifier = identifier;
         ctx->found = 1;
         return 1;
@@ -135,8 +136,11 @@ INTERNAL int session_find_target_id(const ipaddr_t *target, __u16 *out_id)
 {
     struct loop_ctx ctx = LOOP_CTX_NEW(bpf_get_prandom_u32(), *target);
 
-    if (bpf_loop(0xffff, callback, &ctx, 0) < 0)
+    long ret = bpf_loop(0xffff, callback, &ctx, 0);
+    bpf_printk("bpf_loop returned %d\n", ret);
+    if (ret < 0) {
         return -1;
+    }
     if (ctx.found) {
         *out_id = ctx.identifier;
         return 0;

@@ -93,20 +93,23 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
         }
     }
 
+    __u16 global_id;
+    if (session_find_target_id(&target, &global_id) < 0) {
+        bpf_printk("No global ID found.\n");
+        return TC_ACT_SHOT;
+    }
+
     struct probe_args args = {
         .ttl = tr->request.ttl,
         .proto = tr->request.proto,
         .probe.flow = tr->request.flow,
-        .probe.identifier = session_id,
+        .probe.identifier = global_id,
     };
 
     if ((err_args.error = probe_create(cursor, &args, eth, ip, &target)) < 0)
         return TC_ACT_SHOT;
 
     if (err_args.error == ERR_NONE) {
-        __u16 global_id;
-        if (session_find_target_id(&target, &global_id) < 0)
-            return TC_ACT_SHOT;
 
         struct session_key session = SESSION_NEW_KEY(target, global_id);
         struct session_state state =
