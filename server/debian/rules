@@ -1,6 +1,7 @@
 #!/usr/bin/make -f
 export DH_VERBOSE = 1
 export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+export DEB_CFLAGS_MAINT_STRIP = -g
 export DEB_CFLAGS_MAINT_APPEND = -gdwarf-4
 
 %:

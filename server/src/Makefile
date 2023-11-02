@@ -89,7 +89,7 @@ $(test):
 include tools.mk
 
 INCLUDES += -Icommon
-CFLAGS = -Wall
+CFLAGS += -Wall
 
 $(server): traceroute.c $(skeleton) | $(LIBBPF)
 	$(CLANG) $(CFLAGS) $(CPPFLAGS) traceroute.c $(LIBBPF) $(INCLUDES) -I$(SKELETON_DIR) -D$(TRACEROUTE_AF) -o $@ -lelf -lz
