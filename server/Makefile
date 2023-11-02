@@ -1,12 +1,17 @@
 RESULT := result
 
 .PHONY: deb
-deb: | $(RESULT)
+deb: | docs $(RESULT)
 	$(SHELL) ../scripts/package_deb.sh
 
-$(RESULT):
-	mkdir -p $@
+.PHONY: docs
+docs:
+	find docs -type f -name '*.adoc' -exec asciidoctor -b manpage "{}" \;
 
 .PHONY: clean
 clean:
+	find docs -name '*.[1-9]' -delete
 	rm -rf $(RESULT)
+
+$(RESULT):
+	mkdir -p $@

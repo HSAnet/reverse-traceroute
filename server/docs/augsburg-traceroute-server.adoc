@@ -1,0 +1,69 @@
+= augsburg-traceroute-server(1)
+Valentin Heinrich
+:doctype: manpage
+:manmanual: AUGSBURG-TRACEROUTE-SERVER
+:mansource: AUGSBURG-TRACEROUTE-SERVER
+:man-linkstyle: pass:[blue R < >]
+
+== Name
+
+augsburg-traceroute-server - reverse-traceroute endpoint for augsburg-traceroute
+
+== Synposis
+
+*augsburg-traceroute-server-[v4|v6]* [*-t* timeout] [*-n* sessions] +
+    [*--indirect*=[yes|no]] [*--tcp-syn-probes*=[yes|no]] +
+    [*--allow-from*=<path>] [*--allow-indirect-from*=<path>] +
+    interface
+
+== Description
+
+The server attaches an _eBPF_ program to an interface.
+Ingress traffic on the interface will be processed by the program
+before reaching the kernel networking stack.
+This allows the server to process new _ICMP_ messages, on which augsburg-traceroute is built on,
+instead of triggering an unwanted response by the kernel.
+
+Multiple programs can be attached to the same interface,
+allowing you to run both the IPv4 and IPv6 versions of this software on the same interface.
+
+Each reverse traceroute request issued by a client contains a unique identifier.
+When a the server encounters a well-formed and valid request, a new session entry is created.
+
+== Options
+
+*-t* <timeout>::
+    Set the session timeout in nanoseconds.
+
+*-n* <sessions>::
+    Set the number of maximum allowed sessions.
+    When the session buffer is full new requests will be dropped.
+
+*--indirect*=[yes|no]::
+    Specify if a client is allowed to specify a traceroute target
+    other then himself.
+
+*--typ-syn-probes*=[yes|no]::
+    Specify if _TCP_ probes should have the _SYN_ flag set. +
+    While _SYN_ probes generally have a higher likelihood to reach their destination, +
+    some firewalls block repeated _SYN_ packets. +
+    In that case disabling _SYN_ probes might be desirable. +
+
+*--allow-from*=<path>::
+    The path to a file containing allowed networks in _CIDR_ notation. +
+    Only requests from client inside one of the specified networks are processed. +
+    If not explicitly specified this defaults to */etc/augsburg-traceroute-server/[v4|v6]/allowed.txt*. +
+    If no network entries are present in the file, requests from all addresses are allowed. +
+
+ *--allow-indirect-from*=<path>::
+    The path to a file containing networks in _CIDR_ notation inside which clients are allowed to specify a traceroute target. +
+    This option is ignored when the *--indirect* option is disabled. +
+    Only requests from client inside one of the specified networks are processed. +
+    If not explicitly specified this defaults to */etc/augsburg-traceroute-server/[v4|v6]/allowed_indirect.txt*. +
+    If no network entries are present in the file, requests from all addresses are allowed.
+
+== Exit status
+
+*0*: Success.
+
+*1*: Failure
