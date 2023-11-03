@@ -15,77 +15,96 @@ You should have received a copy of the GNU General Public License along with Aug
 If not, see <https://www.gnu.org/licenses/>.
 """
 
-import time
-import sys
+from ipaddress import ip_address, ip_network
+import random
 from signal import SIGINT
-from configparser import ConfigParser
-from ipmininet.iptopo import IPTopo
-from ipmininet.ipnet import IPNet
-from ipmininet.cli import IPCLI
+from mininet.net import Mininet
+from mininet.node import Node
+from mininet.topo import Topo
+from mininet.log import setLogLevel, info
+from mininet.link import TCIntf
+from networkx import MultiGraph, all_shortest_paths, multi_source_dijkstra
+from itertools import chain, permutations, product, pairwise
+from pprint import pprint
+from functools import partial
 
 
-class DiamondTopo(IPTopo):
+class Router(Node):
+    def config(self, **params):
+        super(Router, self).config(**params)
+        self.cmd("sysctl net.ipv4.ip_forward=1")
+        self.cmd("sysctl net.ipv6.ip_forward=1")
+        self.cmd("sysctl net.ipv4.fib_multipath_hash_policy=1")
+        self.cmd("sysctl net.ipv6.fib_multipath_hash_policy=1")
 
-    def build(self, *args, **kwargs):
-        x1, x2, u1, u2, l1, l2, l3 = self.addRouters("x1", "x2", "u1", "u2", "l1", "l2", "l3")
+    def terminate(self):
+        self.cmd("sysctl net.ipv4.ip_forward=0")
+        self.cmd("sysctl net.ipv6.ip_forward=0")
+        self.cmd("sysctl net.ipv4.fib_multipath_hash_policy=0")
+        self.cmd("sysctl net.ipv6.fib_multipath_hash_policy=0")
+        super(Router, self).terminate()
+
+
+class DiamondTopo(Topo):
+
+    def build(self):
+        x1, x2, u1, u2, l1, l2, l3 = (self.addHost(name, cls=Router) for name in ("x1", "x2", "u1", "u2", "l1", "l2", "l3"))
         client = self.addHost("client")
         server = self.addHost("server")
 
-        self.addLink(x1, u1, igp_metric=1)
-        self.addLink(u1, u2, igp_metric=1)
-        self.addLink(u2, x2, igp_metric=2)
+        self.addLink(x1, u1, weight=2)
+        self.addLink(u1, u2)
+        self.addLink(u2, x2)
 
-        self.addLink(x1, l1, igp_metric=1)
-        self.addLink(l1, l2, igp_metric=1)
-        self.addLink(l2, l3, igp_metric=1)
-        self.addLink(l3, x2, igp_metric=1)
+        self.addLink(x1, l1)
+        self.addLink(l1, l2)
+        self.addLink(l2, l3)
+        self.addLink(l3, x2)
 
-        self.addLinks((client,x1),(x2,server))
+        self.addLink(client,x1, weight=1)
+        self.addLink(x2,server, weight=1)
 
-        super().build(*args, **kwargs)
 
+def configure_routes(net, start, stop):
+    graph = net.topo.convertTo(MultiGraph)
 
-    def post_build(self, net):
-        for r in self.routers():
-            net[r].cmd("sysctl net.ipv4.fib_multipath_hash_policy=1")
-            net[r].cmd("sysctl net.ipv6.fib_multipath_hash_policy=1")
+    routes = {}
+    paths = list(all_shortest_paths(graph, start, stop, weight="weight"))
+    for path in paths:
+        for hop, next_hop in pairwise(path):
+            print(f"{hop} -> {next_hop}")
+            if hop not in routes: routes[hop] = set()
+            connections = net[hop].connectionsTo(net[next_hop])
+            pprint(connections)
+            for con in connections:
+                routes[hop].add(con)
 
-        super().post_build(net)
+    pprint(routes)
+    for node, connections in routes.items():
+        routes_str = " ".join(f"nexthop via {next_iface.IP()} dev {local_iface.name}" for local_iface, next_iface in connections)
+        net[node].cmdPrint(f"ip route add {net[stop].IP()} {routes_str}")
 
 
 
 if __name__ == "__main__":
-    assert len(sys.argv) == 2
-    cfg_path = sys.argv[1]
+    setLogLevel("info")
 
-    cfg_parser = ConfigParser()
-    cfg_parser.read(cfg_path)
+    topo = DiamondTopo()
+    net = Mininet(topo=topo, intf=partial(TCIntf, delay=f"{random.randint(2,5)}ms", jitter="1ms"))
+    net.start()
 
-    cfg = cfg_parser["TESTLAB"]
 
-    client = cfg["client"]
-    server_v4 = cfg["server_v4"]
-    server_v6 = cfg["server_v6"]
-
-    net = IPNet(topo=DiamondTopo())
     try:
-        net.start()
+        networks = ((f"10.0.{prefix}.1/24", f"10.0.{prefix}.2/24") for prefix in range(255))
+        for link in net.links:
+            network = next(networks)
+            link.intf1.setIP(network[0])
+            link.intf2.setIP(network[1])
 
-        popen_v4 = net["server"].popen(server_v4, "server-eth0")
-        popen_v6 = net["server"].popen(server_v6, "server-eth0")
-
-        print("Waiting 30 seconds for routes to converge..")
-        time.sleep(30)
-
-        for af in ["4","6"]:
-            for proto in ["udp", "tcp", "icmp"]:
-                print(f"Running test with IPv{af} and protocol {proto}")
-                popen_pcap = net["server"].popen("tcpdump", "-i", "server-eth0", "-w", f"{proto}_{af}.pcap")
-                net["client"].cmd(f"{client} -o {proto}_{af} -{af} two-way {proto} multipath server")
-                popen_pcap.send_signal(SIGINT)
-                time.sleep(0.5)
-
-        popen_v4.send_signal(SIGINT)
-        popen_v6.send_signal(SIGINT)
+        configure_routes(net, "client", "server")
+        configure_routes(net, "server", "client")
+        net.pingFull([net["client"], net["server"]])
+        
+        net.interact()
     finally:
         net.stop()
