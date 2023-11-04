@@ -26,6 +26,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/types.h>
 #include <arpa/inet.h>
 #include <bpf/libbpf.h>
+#include <bpf/bpf.h>
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
@@ -418,6 +419,17 @@ static struct traceroute *traceroute_init(const struct args *args)
 
     netlist_clear(&sources);
     netlist_clear(&indirect_sources);
+
+    // Create valid session identifiers and populate the kernel side with them.
+    for (int i = 1; i <= 0xffff; i++) {
+        __u16 value = i;
+        if (bpf_map__update_elem(traceroute->maps.session_ids, NULL, 0, &value,
+                                 sizeof(value), BPF_ANY) < 0) {
+            fprintf(stderr, "Error while inserting session identifiers\n.");
+            return NULL;
+        }
+    }
+
     return traceroute;
 
 free:

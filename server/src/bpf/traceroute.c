@@ -110,7 +110,6 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
         return TC_ACT_SHOT;
 
     if (err_args.error == ERR_NONE) {
-
         struct session_key session = SESSION_NEW_KEY(target, global_id);
         struct session_state state =
             SESSION_NEW_STATE(bpf_ktime_get_ns(), origin, session_id);

@@ -40,6 +40,14 @@ struct {
     __type(value, struct __session_state);
 } sessions SEC(".maps");
 
+// Contains currently usable session ids, at start
+// populated by userspace.
+struct {
+    __uint(type, BPF_MAP_TYPE_QUEUE);
+    __uint(max_entries, 0xffff);
+    __type(value, __u16);
+} session_ids SEC(".maps");
+
 static int session_timeout_callback(void *map, const struct session_key *key,
                                     struct __session_state *state)
 {
@@ -56,6 +64,7 @@ static struct __session_state *__session_find(const struct session_key *key)
 INTERNAL int session_delete(const struct session_key *session)
 {
     log_message(SESSION_DELETED, session);
+    bpf_map_push_elem(&session_ids, &session->identifier, 0);
     return bpf_map_delete_elem(&sessions, session);
 }
 
@@ -105,46 +114,7 @@ err:
     return -1;
 }
 
-#define LOOP_CTX_NEW(x, y)                                                     \
-    {                                                                          \
-        .start = (x), .found = 0, .target = (y)                                \
-    }
-struct loop_ctx {
-    const ipaddr_t target;
-    __u16 start;
-
-    __u16 identifier;
-    __u8 found;
-};
-
-static long callback(__u32 index, struct loop_ctx *ctx)
-{
-    __u16 identifier = ((ctx->start + index) % 0xffff) + 1;
-    struct session_key key = SESSION_NEW_KEY(ctx->target, identifier);
-
-    if (!session_find(&key)) {
-        bpf_printk("Session ID found: %d\n", identifier);
-        ctx->identifier = identifier;
-        ctx->found = 1;
-        return 1;
-    }
-
-    return 0;
-}
-
 INTERNAL int session_find_target_id(const ipaddr_t *target, __u16 *out_id)
 {
-    struct loop_ctx ctx = LOOP_CTX_NEW(bpf_get_prandom_u32(), *target);
-
-    long ret = bpf_loop(0xffff, callback, &ctx, 0);
-    bpf_printk("bpf_loop returned %d\n", ret);
-    if (ret < 0) {
-        return -1;
-    }
-    if (ctx.found) {
-        *out_id = ctx.identifier;
-        return 0;
-    }
-
-    return -1;
+    return bpf_map_pop_elem(&session_ids, out_id);
 }
