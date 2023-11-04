@@ -165,12 +165,20 @@ static int parse_args(int argc, char **argv, struct args *args)
             }
             break;
         // Maximum session elements
-        case 'n':
-            args->max_elem = strtoul(optarg, &endptr, 0);
+        case 'n':;
+            unsigned long max_elem = strtoul(optarg, &endptr, 0);
+
+            if (max_elem > 0xffff) {
+                fprintf(stderr, "Specified session count exceeds the possible "
+                                "limit of 65535.\n");
+                goto help;
+            }
             if (*endptr != '\0') {
                 fprintf(stderr, "Invalid number specified.\n");
                 goto help;
             }
+
+            args->max_elem = max_elem;
             break;
         default:
             goto help;
@@ -379,6 +387,8 @@ static struct traceroute *traceroute_init(const struct args *args)
 
     if (args->max_elem) {
         if (bpf_map__set_max_entries(traceroute->maps.sessions,
+                                     args->max_elem) < 0 ||
+            bpf_map__set_max_entries(traceroute->maps.session_ids,
                                      args->max_elem) < 0) {
             fprintf(stderr,
                     "Failed to set maximum number of sessions to %lu!\n",
@@ -421,7 +431,7 @@ static struct traceroute *traceroute_init(const struct args *args)
     netlist_clear(&indirect_sources);
 
     // Create valid session identifiers and populate the kernel side with them.
-    for (int i = 1; i <= 0xffff; i++) {
+    for (int i = 1; i <= args->max_elem; i++) {
         __u16 value = i;
         if (bpf_map__update_elem(traceroute->maps.session_ids, NULL, 0, &value,
                                  sizeof(value), BPF_ANY) < 0) {
