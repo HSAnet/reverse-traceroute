@@ -44,7 +44,7 @@ struct {
 // populated by userspace.
 struct {
     __uint(type, BPF_MAP_TYPE_QUEUE);
-    __uint(max_entries, 0xffff);
+    __uint(max_entries, DEFAULT_MAX_ELEM);
     __type(value, __u16);
 } session_ids SEC(".maps");
 
@@ -64,7 +64,7 @@ static struct __session_state *__session_find(const struct session_key *key)
 INTERNAL int session_delete(const struct session_key *session)
 {
     log_message(SESSION_DELETED, session);
-    bpf_map_push_elem(&session_ids, &session->identifier, 0);
+    session_return_id(session->identifier);
     return bpf_map_delete_elem(&sessions, session);
 }
 
@@ -84,15 +84,24 @@ INTERNAL int session_add(const struct session_key *session,
     struct __session_state __state = {.state = *state}, *state_ptr;
 
     ret = bpf_map_update_elem(&sessions, session, &__state, BPF_NOEXIST);
-    if (ret) {
-        switch (ret) {
-        case -EEXIST:
-            log_message(SESSION_EXISTS, session);
-            break;
-        case -E2BIG:
-            log_message(SESSION_BUFFER_FULL, session);
-            break;
+    if (ret < 0) {
+        // This condition will not be met as the pop operation
+        // on the session_ids will return an error before we get here.
+        // This code will become relevant once we return to a target-specific
+        // ID mapping with bpf_loop.
+
+        /*
+        switch(-ret) {
+            case EEXIST:
+                // We get here in a race condition between session lookup and update
+                // Return a code that indicates said condition, caller can then loop until a session is found.
+                break;
+            case E2BIG:
+                log_message(SESSION_BUFFER_FULL, session);
+                break;
         }
+        */
+
         goto err;
     }
 
@@ -116,5 +125,19 @@ err:
 
 INTERNAL int session_find_target_id(const ipaddr_t *target, __u16 *out_id)
 {
-    return bpf_map_pop_elem(&session_ids, out_id);
+    if (bpf_map_pop_elem(&session_ids, out_id) < 0) {
+        struct session_key key = SESSION_NEW_KEY(*target, NONE_ID);
+        log_message(SESSION_ID_POP, &key);
+        return -1;
+    }
+    return 0;
+}
+
+INTERNAL void session_return_id(__u16 id)
+{
+    if (bpf_map_push_elem(&session_ids, &id, 0) < 0) {
+        ipaddr_t addr = NONE_ADDR;
+        struct session_key key = SESSION_NEW_KEY(addr, id);
+        log_message(SESSION_ID_PUSH, &key);
+    }
 }

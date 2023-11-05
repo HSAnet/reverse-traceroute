@@ -26,13 +26,21 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <sys/socket.h>
 
 enum message_type {
-    SESSION_EXISTS,
     SESSION_CREATED,
     SESSION_DELETED,
     SESSION_TIMEOUT,
     SESSION_BUFFER_FULL,
     SESSION_PROBE_ANSWERED,
+
+    SESSION_ID_POP,
+    SESSION_ID_PUSH,
 };
+
+#define NONE_ADDR                                                              \
+    {                                                                          \
+        0                                                                      \
+    }
+#define NONE_ID 0
 
 struct message {
     enum message_type type;

@@ -431,7 +431,8 @@ static struct traceroute *traceroute_init(const struct args *args)
     netlist_clear(&indirect_sources);
 
     // Create valid session identifiers and populate the kernel side with them.
-    for (int i = 1; i <= args->max_elem; i++) {
+    for (__u32 i = 1; i <= bpf_map__max_entries(traceroute->maps.sessions);
+         i++) {
         __u16 value = i;
         if (bpf_map__update_elem(traceroute->maps.session_ids, NULL, 0, &value,
                                  sizeof(value), BPF_ANY) < 0) {
@@ -468,9 +469,6 @@ static int log_message(void *ctx, void *data, size_t size)
 
     printf("[%*s, %5u] | ", ADDRSTRLEN, address, msg->data.probe_id);
     switch (msg->type) {
-    case SESSION_EXISTS:
-        printf("session exists.\n");
-        break;
     case SESSION_CREATED:
         printf("session created.\n");
         break;
@@ -480,11 +478,16 @@ static int log_message(void *ctx, void *data, size_t size)
     case SESSION_TIMEOUT:
         printf("session timed out.\n");
         break;
+    case SESSION_ID_POP:
     case SESSION_BUFFER_FULL:
         printf("session buffer full.\n");
         break;
     case SESSION_PROBE_ANSWERED:
         printf("probe answer received.\n");
+        break;
+    case SESSION_ID_PUSH:
+        printf("failed to return session ID to queue. Program now runs with "
+               "degraded set of sessions.\n");
         break;
     }
 
