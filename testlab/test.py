@@ -65,7 +65,7 @@ if __name__ == "__main__":
         time.sleep(30)
 
         result_dir = Path(os.getcwd()) / "results"
-        shutil.rmtree(result_dir)
+        shutil.rmtree(result_dir, ignore_errors=True)
         os.mkdir(result_dir)
 
         for af in ("4", "6"):
