@@ -27,8 +27,32 @@ instead of triggering an unwanted response by the kernel.
 Multiple programs can be attached to the same interface,
 allowing you to run both the IPv4 and IPv6 versions of this software on the same interface.
 
-Each reverse traceroute request issued by a client contains a unique identifier.
 When a the server encounters a well-formed and valid request, a new session entry is created.
+Each session entry is stored as part of a map and divided into a session key and corresponding state.
+The session key contains the target address and the sessions global identifier.
+The session state contains the timestamp when the session was created, the client's address and the request's local identifier.
+
+Each reverse traceroute request issued by a client contains an identifier unique to the client.
+The server translates the local identifier into the global identifier unique to the server to remove ambiguity should multiple clients
+trace towards the same target with overlapping local identifiers.
+
+As the global identifier is limited to 16 bits, the maximum number of allowed sessions is currently limited to 65535.
+Should newer kernel versions become more common, this limitation can be lifted to 65535 sessions per target,
+with no global upper limit. But due to the current limited _eBPF_ functionality, this is not yet feasable.
+
+A probe with the requested protocol and flow is issued to the target, with the global identifier encoded inside the probe.
+When receiving a possible probe response, the global identifier is extracted and the associated session entry looked up.
+The server can then retrieve the stored timestamp created when issuing the corresponding probe and compute the round-trip-time (_RTT_).
+A response with the _RTT_ and the source address of the probe's response is then issued back to the client.
+The response's destination address and local identifier are copied from the associated state.
+
+Should no response be received for a session entry it is deleted after the configured timeout.
+
+The server uses fixed fields for traceroute probes to designate them as such.
+For _UDP_ and _TCP_ the source port 1021 (experimental) is used.
+For _ICMP_ the fixed sequence 0xFFFF serves this purpose.
+The server is able to figure out if a packet was issued as a response to a probe
+with said characteristics and does not pass the packet up to the kernel in that case.
 
 == Options
 
@@ -65,5 +89,4 @@ When a the server encounters a well-formed and valid request, a new session entr
 == Exit status
 
 *0*: Success.
-
-*1*: Failure
+*1*: Failure.
