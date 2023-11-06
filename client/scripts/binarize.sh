@@ -2,23 +2,16 @@
 
 set -e
 
-export HOME=$(mktemp -d -p /var/tmp)
-export POETRY_HOME=$HOME/.local
-export PATH=$PATH:$POETRY_HOME/bin
+command -v poetry >/dev/null 2>&1 || {
+	export HOME=$(mktemp -d -p /var/tmp)
+	export POETRY_HOME=$HOME/.local
+	export PATH=$PATH:$POETRY_HOME/bin
 
-curl -sSL https://install.python-poetry.org | python3 -
-ROOT=$(pwd)
+	curl -sSL https://install.python-poetry.org | python3 -
+}
 
-TEMPDIR=$(mktemp -d)
-cp -r * $TEMPDIR/
-(
-	cd "$TEMPDIR"
-	
-	poetry install
-	CLIENT=$(poetry run which augsburg-traceroute)
-	poetry run pyinstaller -F $CLIENT
-
-	cp -r dist/* $ROOT/
-)
-
-rm -r "$TEMPDIR"
+poetry install
+poetry run $SHELL <<- 'DONE'
+	CLIENT=$(which augsburg-traceroute)
+	pyinstaller -F $CLIENT --distpath . --workpath=$(mktemp -d) --specpath=$(mktemp -d)
+DONE
