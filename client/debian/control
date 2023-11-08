@@ -9,7 +9,8 @@ Package: augsburg-traceroute-client
 Architecture: any
 Multi-Arch: foreign
 Depends: ${misc:Depends}, ${shlibs:Depends}, graphviz
-Description: A multipath-capable traceroute client
+Description: Multipath-capable (reverse-)traceroute client
  The client is able to perform reverse-traceroute traces when run
  against a target hosting the augsburg-traceroute-server.
- It supports multi- and singlepath functionality with ICMP, UDP and TCP traceroute probes.
+ It supports multi- and singlepath functionality with
+ ICMP, UDP and TCP traceroute probes.
