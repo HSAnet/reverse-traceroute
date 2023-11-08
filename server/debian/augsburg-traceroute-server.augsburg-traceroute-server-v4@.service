@@ -4,7 +4,7 @@ After=network-online.target
   
 [Service]
 Type=simple
-ExecStart=/usr/sbin/augsburg-traceroute-server-v4 -n 5000 -t 5000000000 %I
+ExecStart=/usr/sbin/augsburg-traceroute-server-v4 -n 5000 -t 5 %I
  
 [Install]
 WantedBy=multi-user.target

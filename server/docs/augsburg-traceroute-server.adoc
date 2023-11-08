@@ -57,7 +57,7 @@ with said characteristics and does not pass the packet up to the kernel in that 
 == Options
 
 *-t* <timeout>::
-    Set the session timeout in nanoseconds.
+    Set the session timeout in seconds.
 
 *-n* <sessions>::
     Set the number of maximum allowed sessions.
@@ -88,5 +88,5 @@ with said characteristics and does not pass the packet up to the kernel in that 
 
 == Exit status
 
-*0*: Success.
+*0*: Success. +
 *1*: Failure.

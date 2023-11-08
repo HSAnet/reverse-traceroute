@@ -47,6 +47,8 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #define AF_STR        "v6"
 #endif
 
+#define SECONDS_TO_NS 1E9
+
 #define FILTER_PRIO 1
 
 struct args {
@@ -70,11 +72,11 @@ struct args {
 };
 
 const char *fmt_help_message =
-    "Usage: %s [-t TIMEOUT_NS] [-n MAX_ENTRIES]\n"
+    "Usage: %s [-t TIMEOUT] [-n MAX_ENTRIES]\n"
     "\t\t[--indirect=yes|no] [--tcp-syn-probes=yes|no]\n"
     "\t\t[--allow-from=filepath] [--allow-indirect-from=filepath]\n"
     "\n"
-    "\t-t: The time after which a session expires, in nanoseconds.\n"
+    "\t-t: The time after which a session expires, in seconds.\n"
     "\t-n: The maximum number of sessions the server can handle.\n"
     "\t--indirect: Whether or not the client is allowed to choose the "
     "trace target.\n"
@@ -157,12 +159,15 @@ static int parse_args(int argc, char **argv, struct args *args)
             args->indirect_sources_filename = strdup(optarg);
             break;
         // Timeout
-        case 't':
-            args->timeout_ns = strtoull(optarg, &endptr, 0);
-            if (*endptr != '\0' || args->timeout_ns == 0) {
+        case 't':;
+            unsigned long seconds = strtoull(optarg, &endptr, 0);
+
+            if (*endptr != '\0' || seconds == 0) {
                 fprintf(stderr, "Invalid number specified.\n");
                 goto help;
             }
+
+            args->timeout_ns = seconds * SECONDS_TO_NS;
             break;
         // Maximum session elements
         case 'n':;
@@ -173,7 +178,7 @@ static int parse_args(int argc, char **argv, struct args *args)
                                 "limit of 65535.\n");
                 goto help;
             }
-            if (*endptr != '\0') {
+            if (*endptr != '\0' || max_elem == 0) {
                 fprintf(stderr, "Invalid number specified.\n");
                 goto help;
             }
@@ -531,8 +536,8 @@ int main(int argc, char **argv)
     if (bpf_tc_attach(&hook, &opts) < 0)
         goto destroy;
 
-    fprintf(stderr, "\n\nSession timeout in nanoseconds: %llu\n",
-            tr->rodata->CONFIG_TIMEOUT_NS);
+    fprintf(stderr, "\n\nSession timeout in seconds: %.2lf\n",
+            tr->rodata->CONFIG_TIMEOUT_NS / SECONDS_TO_NS);
     fprintf(stderr, "Maximum session entries: %u\n",
             bpf_map__max_entries(tr->maps.sessions));
     fprintf(stderr, "Indirect trace enabled: %s\n",
