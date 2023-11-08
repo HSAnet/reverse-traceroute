@@ -11,12 +11,12 @@ augsburg-traceroute - reverse-traceroute client for augsburg-traceroute
 
 == Synposis
 
-*augsburg-traceroute [options] <direction> <protocol> <mode> [mode-options] target
+*augsburg-traceroute* [options] <direction> <protocol> <mode> [mode-options] remote
 
 == Description
 
 The augsburg traceroute client is capable to discover nodes in both the
-forward and reverse direction. When used in the reverse direction, the target
+forward and reverse direction. When used in the reverse direction, the remote
 endpoint has to run the augsburg-traceroute-server endpoint.
 
 The client supports _UDP_, _TCP_ and _ICMP_ probes.
@@ -28,26 +28,111 @@ can be tweaked via the options.
 == Required options
 
 *direction*::
-	The direction of the trace from the clients point of view.
-	Allowed values are *forward*, *reverse* and *two-way*.
+	The direction of the trace from the clients point of view. +
+ 	Valid values are *forward*, *reverse* or *two-way*.
 
 *protocol*::
-	The protocol that the traceroute probes must employ.
+	The protocol that the traceroute probes must employ. +
 	Valid values are *udp*, *tcp* and *icmp*.
 
 *mode*::
-	The mode of operation to use.
-	This can be either *singlepath* or *multipath*
+	The mode of operation to use. +
+	Valid values are *singlepath* or *multipath*. +
 	Options specific to the selected mode can be specified after this option.
 	
 	*singlepath*:::
 		Discovers a single path.
-		This allows for faster execution time then the *multipath* mode.
+		This allows for faster execution time then the multipath mode.
 
 	*multipath*:::
 		Attempts to discover all possible paths.
-		This may take significantly longer than *singlepath* discovery
+		This may take significantly longer than singlepath discovery
 		but results in a more complete picture.
+
+== General options
+
+*-4* | *-6*::
+	Resolve hosts to IPv4 or IPv6 addresses respectively.
+	When omitted IPv4 is preferred over IPv6.
+
+*--timeout*=<seconds>::
+	Wait for responses for at most the specified number of seconds.
+
+*--inter*=<inter>::
+	Wait *inter* seconds inbetween sending packets.
+
+*--abort*=<hops>::
+	Abort the measurement when receiving no responses after the given number
+	of successive *hops*.
+
+*--min-ttl*=<TTL>::
+	Start probing at the given TTL.
+
+*--max-ttl*=<TTL>::
+	Stop probing at the given TTL.
+
+*-y*, *--assume-yes*::
+	Run in noninteractive mode, assume yes as the answer for possible prompts.
+
+*--no-merge*::
+	Do not merge hops with the same address but different TTL values.
+	This may lead to multiple occurrences of the same node in the graph
+	but with more accurate measurement data.
+	By default merging is performed, resulting in a single node with a mean RTT value.
+
+*-n*, *--no-resolve*::
+	Do not resolve addresses to hostnames.
+
+*--resolve-aliases*::
+	Resolve router level aliases with the _APAR_ algorithm.
+	Only works for IPv4, the result may not be accurate.
+
+*-o*, *--output*=<output>::
+	Render the resulting graph to a file with output as the basename.	
+
+*-f*, *--format*=[dot|gif|jpg|pdf|png|ps|svg]::
+	Render the output graph to the given format.
+
+*-l*, *--log-level*=[debug|info|warning]::
+	Print all log messages with at least the given severity.
+
+*--forward-to*=<target>::
+	Direct the remote server to trace towards the given target.
+	Only works in the reverse direction and only when given remote supports
+	the indirect-forwarding extension.
+	
+== Mode-specific options
+
+=== Singlepath
+
+*--flow*=<flow>::
+	Encode the specified 16-bit number into a field used to influence per-flow load-balancing in routers.
+	As the other header fields in the probes remain constant during the measurement this field basically influences
+	which path will be discovered.
+
+*--probes*=<probes>::
+	Send the given number of probes to each hop.
+
+=== Multipath
+
+*--retry*=<count>::
+	The maximum count of retransmissions to attempt for a each probe.
+
+*--confidence*=<confidence>::
+	The acceptable probability of failing to detect all vertices at a hop. +
+	The confidence is specifed as a floating point number between 0 and 1. +
+	A smaller number results in a higher accuracy of the measurement but can increase
+	the number probes required to reach the destination.
+
+*--opt-single-vertex-hop*::
+	Do not send probes to a hop that is known to contain a single node. +
+	Assume that all probes to the next hop must traverse the single node.
+
+*--min-burst*=<probes>::
+	Send the probes in chunks at least the given number of probes.
+	
+*--max-burst*=<probes>::
+	Send the probes in chunks at most the given number of probes.
 
 == Exit status
 
