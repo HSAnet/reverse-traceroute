@@ -2,7 +2,7 @@ RESULT := result
 
 .PHONY: deb
 deb: | docs $(RESULT)
-	$(SHELL) ../scripts/package_deb.sh
+	../scripts/package_deb
 
 .PHONY: docs
 docs:

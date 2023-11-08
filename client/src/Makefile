@@ -3,7 +3,7 @@ RESULT := result
 client := augsburg-traceroute
 
 $(client):
-	$(SHELL) ../scripts/binarize.sh
+	../scripts/binarize
 
 .PHONY: install
 install:

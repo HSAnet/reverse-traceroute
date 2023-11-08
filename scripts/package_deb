@@ -1,0 +1,29 @@
+#!/bin/bash
+
+set -e
+
+RESULT="$(pwd)/result"
+TEMP="$(mktemp -d)"
+DIRNAME="$(basename $(pwd))"
+USER="$(id -u -n)"
+
+WORKDIR="$TEMP/$DIRNAME"
+
+mkdir "$WORKDIR"
+cp -r * "$WORKDIR"
+
+(
+	cd "$WORKDIR"
+
+	VERSION="$(dpkg-parsechangelog --show-field Version | cut -d '-' -f 1)"
+	PACKAGE="$(dpkg-parsechangelog --show-field Source)"
+
+	debmake -yt
+	cd "../$PACKAGE-$VERSION"
+
+	sudo pbuilder update
+	sudo pdebuild --buildresult "$RESULT" -- --use-network yes
+	sudo chown -R "$USER:$USER" "$RESULT"
+)
+
+rm -rf "$TEMP"
