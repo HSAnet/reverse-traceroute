@@ -1,0 +1,9 @@
+Files:
+ *
+Copyright: 2022-2023 University of Applied Sciences Augsburg
+License: GPL-3
+
+Files:
+ src/core/mda.py
+Copyright: 2020 Sorbonne Université
+License: MIT
