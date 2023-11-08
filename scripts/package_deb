@@ -4,7 +4,7 @@ set -e
 
 RESULT="$(pwd)/result"
 TEMP="$(mktemp -d)"
-DIRNAME="$(basename $(pwd))"
+DIRNAME="$(basename "$(pwd)")"
 USER="$(id -u -n)"
 
 WORKDIR="$TEMP/$DIRNAME"
