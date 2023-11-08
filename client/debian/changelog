@@ -1,6 +1,5 @@
-augsburg-traceroute-client (0.02.0-1) jammy; urgency=low
+augsburg-traceroute-client (0.03.0-1) jammy; urgency=low
 
-  [ valentin ]
   * Initial release.
 
  -- Valentin Heinrich <valentin.heinrich@hs-augsburg.de>  Tue, 24 Oct 2023 12:01:50 +0200

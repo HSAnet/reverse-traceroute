@@ -59,11 +59,11 @@ can be tweaked via the options.
 	Wait for responses for at most the specified number of seconds.
 
 *--inter*=<inter>::
-	Wait *inter* seconds inbetween sending packets.
+	Wait inter seconds inbetween sending packets.
 
 *--abort*=<hops>::
 	Abort the measurement when receiving no responses after the given number
-	of successive *hops*.
+	of successive hops.
 
 *--min-ttl*=<TTL>::
 	Start probing at the given TTL.
