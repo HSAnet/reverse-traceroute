@@ -1,0 +1,55 @@
+= augsburg-traceroute-client(1)
+Valentin Heinrich
+:doctype: manpage
+:manmanual: AUGSBURG-TRACEROUTE
+:mansource: AUGSBURG-TRACEROUTE
+:man-linkstyle: pass:[blue R < >]
+
+== Name
+
+augsburg-traceroute - reverse-traceroute client for augsburg-traceroute
+
+== Synposis
+
+*augsburg-traceroute [options] <direction> <protocol> <mode> [mode-options] target
+
+== Description
+
+The augsburg traceroute client is capable to discover nodes in both the
+forward and reverse direction. When used in the reverse direction, the target
+endpoint has to run the augsburg-traceroute-server endpoint.
+
+The client supports _UDP_, _TCP_ and _ICMP_ probes.
+It can run in either singlepath or multipath mode.
+
+The resulting traces are rendered to an image, the output format
+can be tweaked via the options.
+
+== Required options
+
+*direction*::
+	The direction of the trace from the clients point of view.
+	Allowed values are *forward*, *reverse* and *two-way*.
+
+*protocol*::
+	The protocol that the traceroute probes must employ.
+	Valid values are *udp*, *tcp* and *icmp*.
+
+*mode*::
+	The mode of operation to use.
+	This can be either *singlepath* or *multipath*
+	Options specific to the selected mode can be specified after this option.
+	
+	*singlepath*:::
+		Discovers a single path.
+		This allows for faster execution time then the *multipath* mode.
+
+	*multipath*:::
+		Attempts to discover all possible paths.
+		This may take significantly longer than *singlepath* discovery
+		but results in a more complete picture.
+
+== Exit status
+
+*0*: Success. +
+*1*: Failure.

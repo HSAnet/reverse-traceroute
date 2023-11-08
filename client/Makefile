@@ -1,33 +1,17 @@
-PREFIX := /usr
 RESULT := result
-client := augsburg-traceroute
-
-$(client):
-	$(SHELL) scripts/binarize.sh
 
 .PHONY: deb
-deb: | $(RESULT)
+deb: | docs $(RESULT)
 	$(SHELL) ../scripts/package_deb.sh
 
-.PHONY: install
-install:
-	install -D $(client) $(DESTDIR)$(PREFIX)/sbin/$(client)
-
-.PHONY: uninstall
-uninstall:
-	-rm -f $(DESTDIR)$(PREFIX)/sbin/$(client)
+.PHONY: docs
+docs:
+	find docs -type f -name '*.adoc' -exec asciidoctor -b manpage "{}" \;
 
 .PHONY: clean
 clean:
-	find . -type d -name __pycache__ -exec rm -rf "{}" \;
-	rm -rf $(client) $(RESULT)
-
-.PHONY: format
-format:
-	poetry run black src
+	find docs -name '*.[1-9]' -delete
+	rm -rf $(RESULT)
 
 $(RESULT):
 	mkdir -p $@
-
-.PHONY: distclean
-distclean: clean
