@@ -10,8 +10,8 @@ command -v poetry >/dev/null 2>&1 || {
 	curl -sSL https://install.python-poetry.org | python3 -
 }
 
-poetry install
-poetry run $SHELL <<- 'DONE'
+poetry install -n
+poetry run -n $SHELL <<- 'DONE'
 	CLIENT="$(which augsburg-traceroute)"
 	pyinstaller -F "$CLIENT" --distpath . --workpath="$(mktemp -d)" --specpath="$(mktemp -d)"
 DONE
