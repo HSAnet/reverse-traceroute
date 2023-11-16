@@ -27,5 +27,5 @@ cp -r * "$WORKDIR"
 )
 
 rm -rf "$TEMP"
-debsign --debs-dir "$RESULT"
-lintian "$RESULT"/*.changes
+debsign --no-re-sign "$RESULT"/*.changes
+lintian -i -I --show-overrides "$RESULT"/*.changes
