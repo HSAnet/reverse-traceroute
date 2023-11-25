@@ -1,5 +1,6 @@
 # Reverse Traceroute
 Reverse traceroute is an extension to ICMP, enabling hosts to request traceroute measurements back to themselves from a remote target.  
+Additionally, the client may request indirect traces from a remote endpoint towards an arbitrary target if the remote endpoint allows it.  
 For detailed information about reverse traceroute and its concepts, have a look at the [resources](#resources).
 
 This repository contains reference implementations for reverse traceroute client and server applications.  
@@ -38,20 +39,33 @@ Reverse traceroute was built in accordance with the following principles:
     Reverse traceroute behaves just like regular traceroute. You can send UDP, TCP and ICMP probes
     and expect both node address and Round-Trip-Time as a measurement.
 
-## Client
-The client is implemented as a Python script and requires at least `Python 3.10`.  
-It supports supports both single- and multipath discovery.
+## Installation
+We provide Debian packages for Ubuntu 22.04 LTS for both client and server.  
+First the repository must be added to the `/etc/apt/sources.list`:
+```
+# Augsburg-Traceroute
+deb https://deb.net.hs-augsburg.de jammy/
+```
 
+Then the repository's signing key should be added to your trusted keyrings:
+```
+TODO
+```
+
+Finally the packages can be installed with the following command:
+```
+sudo apt update
+sudo apt install augsburg-traceroute-client augsburg-traceroute-server
+```
+
+## Client
+The client is used to run traceroute measurements with both single- and multipath discovery.  
 When run in the singlepath mode a fixed flow identifier has to be specified, which
-determines the path that the traceroute probes will illuminate.  
+determines the path that the traceroute probes will illuminate.
 When run in the multipath mode, a variation of the [Diamond Miner](https://github.com/dioptra-io/diamond-miner)
 algorithm ensures that all nodes for a hop will be detected with a certainty specified by the user.
-
 Both modes of operation can be used in the forward and, since we are talking about reverse traceroute,
 in the **reverse** direction.
-
-As the client renders the discovered paths, you need the graphviz binary accessible through your
-`PATH` variable.
 
 ### Examples
 To discover multiple paths towards a destination with TCP, use the following command:
@@ -69,8 +83,10 @@ To discover both reverse and forward paths with TCP and submit the results to ou
 augsburg-traceroute --transmit two-way tcp multipath <target>
 ```
 
-The client provides a few more fine-grained controls to influence the probing behaviour.  
-Run `augsburg-traceroute -h` to learn more.
+To request an indirect trace from a remote endpoint towards an arbitrary target:
+```
+augsburg-traceroute --forward-to <target> reverse udp singlepath --flow 1234 <remote>
+```
 
 ## Server
 The server application is written as an [eBPF](https://ebpf.io/what-is-ebpf/) program.
@@ -81,88 +97,35 @@ As the application makes use of recent eBPF features such as timers,
 at least a recent linux kernel version of `5.15.0` is required.  
 We successfully tested the server on an x86-64 machine running Ubuntu 22.04 and a `5.15.0-52` kernel.
 
-You can specify both the size of the session buffer and the timeout value,
-after which unanswered sessions are dropped.  
-The interface name on which the server will process reverse traceroute traffic
-is a mandatory argument.
+The networks from which reverse-traceroute requests are allowed can be limited
+by editing the `/etc/augsburg-traceroute/[v4|v6]/allowed.txt` and `/etc/augsburg-traceroute/[v4|v6]/allowed_indirect.txt`
+files.
+The first filter only allows requests that come from source addresses contained in one of the specified networks,
+the second filter then further limits the source addresses that are allowed to request an indirect trace.
+
+### Running as a service
+To easily integrate the server into the system we provide systemd-service templates
+with the Debian package. You can enable and start the service on an interface with the following command:
 
 ```
-sudo augsburg-traceroute-server-v4 [-n MAX_SESSIONS] [-t TIMEOUT_NS] ifname
-sudo augsburg-traceroute-server-v6 [-n MAX_SESSIONS] [-t TIMEOUT_NS] ifname
+sudo systemctl enable --now augsburg-traceroute-server-v4@<ifname>
+sudo systemctl enable --now augsburg-traceroute-server-v6@<ifname>
+```
+
+To change the commandline arguments passed to the server you can edit the service:
+```
+sudo systemctl edit --full augsburg-traceroute-server-v4@<ifname>
+sudo systemctl edit --full augsburg-traceroute-server-v6@<ifname>
 ```
 
 ### Examples
-To run the IPv4 and IPv6 servers on the interface eth0, with at most 50.000 sessions and
-and a session timeout of 5 seconds:
+To run the IPv4 and IPv6 servers on the interface eth0 and support for indirect traces,  
+with at most 50.000 sessions and and a session timeout of 5 seconds:
 
 ```
-augsburg-traceroute-server-v4 -n 50000 -t 5000000000 eth0
-augsburg-traceroute-server-v6 -n 50000 -t 5000000000 eth0
+augsburg-traceroute-server-v4 -n 50000 -t 5 --indirect=yes eth0
+augsburg-traceroute-server-v6 -n 50000 -t 5 --indirect=yes eth0
 ```
-
-### Running the server as a service
-This example creates a service for the IPv4 version of the server.
-You can create a similar IPv6 version with minimal adjustments.
-
-In order to persist the server applications across reboots,
-you can create a systemd service.
-First you have to create a file `/etc/systemd/system/reverse-traceroute-v4@.service`:
-
-```
-[Unit]
-Description=reverse-traceroute-v4
-After=network-online.target
-  
-[Service]
-Type=simple
-ExecStart=<path-to-server> -n <max-sessions> -t <timeout-ns> %I
- 
-[Install]
-WantedBy=multi-user.target
-```
-Make sure to replace the path to the server and arguments with your own configuration.
-Before starting the service, you have to make systemd aware of it by running:
-```
-sudo systemctl daemon-reload
-```
-Then you can start the service with the following command:
-```
-sudo systemctl start reverse-traceroute-v4@<ifname>
-```
-In order to persist the service across reboots, run:
-```
-sudo systemctl enable reverse-traceroute-v4@<ifname>
-```
-Note that you have to replace `<ifname>` with the name of the interface
-the server should run on.
-
-## Building the software
-This repository includes dependencies in the form of git submodules,
-which must be initialized before the software can be built.  
-To initialize said submodules when cloning the repository, run:
-```
-git clone --recurse-submodules https://github.com/HSAnet/reverse-traceroute
-```
-### Client
-In order to build the client [Poetry](https://python-poetry.org/docs/) has to be installed.
-In the `client/` directory run:
-```
-poetry build -f wheel
-```
-The built package can be found in the `dist/` subdirectory.
-To install the built client globally, run:
-```
-sudo pip3 install dist/<package-name>.whl
-```
-Make sure to replace `<package-name>` with the actual name of the package.
-
-### Server
-In the `server/` directory run:
-```
-bash build_docker.sh
-```
-The executables will be built in a docker container that includes
-the needed dependencies.
 
 ## Measurement study
 We are trying to collect data about traceroute paths for our measurement study.
@@ -180,9 +143,6 @@ Hence it lives from the people who decide to host publicly available server endp
 Should you decide to host such a reverse traceroute server,
 then please let us know so that we can add your server to the list of endpoints,
 which are maintained inside the `ENDPOINTS` file.
-
-## Future work
-* Allow the client to (optionally) request a traceroute to another address
 
 ## Disclaimer
 Both the client and the server are subject to change, as they are still early in development.
