@@ -94,6 +94,8 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
     }
 
     __u16 global_id;
+    // Pop a new session identifier from queue.
+    // All error branches must return the identifier to the queue.
     if (session_find_target_id(&target, &global_id) < 0)
         return TC_ACT_SHOT;
 
@@ -104,19 +106,17 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
         .probe.identifier = global_id,
     };
 
-    if ((err_args.error = probe_create(cursor, &args, eth, ip, &target)) < 0) {
-        session_return_id(global_id);
-        return TC_ACT_SHOT;
-    }
+    if ((err_args.error = probe_create(cursor, &args, eth, ip, &target)) < 0)
+        goto drop;
 
     if (err_args.error == ERR_NONE) {
         struct session_key session = SESSION_NEW_KEY(target, global_id);
         struct session_state state =
             SESSION_NEW_STATE(bpf_ktime_get_ns(), origin, session_id);
-        if (session_add(&session, &state) < 0) {
-            session_return_id(global_id);
-            return TC_ACT_SHOT;
-        }
+
+        if (session_add(&session, &state) < 0)
+            goto drop;
+
         goto redirect;
     }
 
@@ -131,6 +131,10 @@ error:;
         return TC_ACT_SHOT;
 redirect:
     return bpf_redirect(cursor->skb->ifindex, 0);
+
+drop:
+    session_return_id(global_id);
+    return TC_ACT_SHOT;
 }
 
 static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
