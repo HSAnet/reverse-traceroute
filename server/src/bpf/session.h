@@ -63,7 +63,8 @@ struct session_state {
 
 INTERNAL int session_find_target_id(const ipaddr_t *target, __u16 *out_id);
 INTERNAL void session_return_id(__u16 id);
-INTERNAL struct session_state *session_find_delete(const struct session_key *key);
+INTERNAL struct session_state *
+session_find_delete(const struct session_key *key);
 INTERNAL int session_add(const struct session_key *session,
                          const struct session_state *state);
 

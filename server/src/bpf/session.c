@@ -48,7 +48,8 @@ struct {
     __type(value, __u16);
 } session_ids SEC(".maps");
 
-static int session_delete(const struct session_key *key) {
+static int session_delete(const struct session_key *key)
+{
     if (bpf_map_delete_elem(&sessions, key) == 0) {
         session_return_id(key->identifier);
         log_message(SESSION_DELETED, key);
@@ -70,7 +71,8 @@ static struct __session_state *__session_find(const struct session_key *key)
     return bpf_map_lookup_elem(&sessions, key);
 }
 
-INTERNAL struct session_state *session_find_delete(const struct session_key *key)
+INTERNAL struct session_state *
+session_find_delete(const struct session_key *key)
 {
     struct __session_state *__state = __session_find(key);
 
@@ -96,9 +98,10 @@ INTERNAL int session_add(const struct session_key *session,
         /*
         switch(-ret) {
             case EEXIST:
-                // We get here in a race condition between session lookup and update
-                // Return a code that indicates said condition, caller can then loop until a session is found.
-                break;
+                // We get here in a race condition
+                // between session lookup and update
+                // Return a code that indicates said condition, caller can then
+                // loop until a session is found. break; case E2BIG:
             case E2BIG:
                 log_message(SESSION_BUFFER_FULL, session);
                 break;
