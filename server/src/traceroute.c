@@ -49,7 +49,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 #define SECONDS_TO_NS 1E9
 
-#define FILTER_PRIO 1
+#define FILTER_PRIO   1
 
 struct args {
     // Always specified by the user
@@ -160,9 +160,9 @@ static int parse_args(int argc, char **argv, struct args *args)
             break;
         // Timeout
         case 't':;
-            unsigned long seconds = strtoull(optarg, &endptr, 0);
+            double seconds = strtod(optarg, &endptr);
 
-            if (*endptr != '\0' || seconds == 0) {
+            if (*endptr != '\0' || seconds <= 0) {
                 fprintf(stderr, "Invalid number specified.\n");
                 goto help;
             }
