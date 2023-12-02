@@ -48,6 +48,15 @@ struct {
     __type(value, __u16);
 } session_ids SEC(".maps");
 
+static int session_delete(const struct session_key *key) {
+    if (bpf_map_delete_elem(&sessions, key) == 0) {
+        session_return_id(key->identifier);
+        log_message(SESSION_DELETED, key);
+        return 0;
+    }
+    return -1;
+}
+
 static int session_timeout_callback(void *map, const struct session_key *key,
                                     struct __session_state *state)
 {
@@ -61,19 +70,13 @@ static struct __session_state *__session_find(const struct session_key *key)
     return bpf_map_lookup_elem(&sessions, key);
 }
 
-INTERNAL int session_delete(const struct session_key *session)
-{
-    log_message(SESSION_DELETED, session);
-    session_return_id(session->identifier);
-    return bpf_map_delete_elem(&sessions, session);
-}
-
-INTERNAL struct session_state *session_find(const struct session_key *key)
+INTERNAL struct session_state *session_find_delete(const struct session_key *key)
 {
     struct __session_state *__state = __session_find(key);
 
-    if (!__state)
+    if (!__state || session_delete(key) < 0)
         return NULL;
+
     return &__state->state;
 }
 
@@ -85,7 +88,7 @@ INTERNAL int session_add(const struct session_key *session,
 
     ret = bpf_map_update_elem(&sessions, session, &__state, BPF_NOEXIST);
     if (ret < 0) {
-        // This condition will not be met as the pop operation
+        // These conditions below will not be met as the pop operation
         // on the session_ids will return an error before we get here.
         // This code will become relevant once we return to a target-specific
         // ID mapping with bpf_loop.

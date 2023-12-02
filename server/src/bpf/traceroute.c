@@ -208,12 +208,11 @@ static tc_action handle(struct cursor *cursor)
         goto pass;
 
     struct session_key session = SESSION_NEW_KEY(target, identifier);
-    struct session_state *state = session_find(&session);
+    struct session_state *state = session_find_delete(&session);
     if (!state)
         goto drop;
 
     log_message(SESSION_PROBE_ANSWERED, &session);
-    session_delete(&session);
 
     // When a direct TCP response was received that matched a session entry,
     // just pass a copy to the ingress path of our associated interface after
