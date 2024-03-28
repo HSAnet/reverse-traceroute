@@ -292,16 +292,12 @@ static int parse_networks(FILE *sources, struct netlist *networks,
 
     if (errno) {
         perror("getline: ");
-        goto cleanup;
+        return -1;
     }
     if (networks->len != nentries)
-        goto cleanup;
+        return -1;
 
     return nentries;
-
-cleanup:
-    netlist_clear(networks);
-    return -1;
 }
 
 static int update_networks(struct bpf_map *map, struct netlist *networks)
@@ -326,6 +322,7 @@ static int update_networks(struct bpf_map *map, struct netlist *networks)
 
     return 0;
 }
+
 static int load_networks(FILE *sources, struct bpf_map *map,
                          struct netlist *networks, struct netlist *parents)
 {
@@ -341,7 +338,7 @@ static int load_networks(FILE *sources, struct bpf_map *map,
     }
 
     if (bpf_map__set_max_entries(map, networks->len) < 0) {
-        netlist_clear(networks);
+        perror("Failed to resize network map: ");
         return -1;
     }
 
@@ -442,7 +439,7 @@ static struct traceroute *traceroute_init(const struct args *args)
         if (bpf_map__update_elem(traceroute->maps.session_ids, NULL, 0, &value,
                                  sizeof(value), BPF_ANY) < 0) {
             fprintf(stderr, "Error while inserting session identifiers\n.");
-            return NULL;
+            goto err;
         }
     }
 
