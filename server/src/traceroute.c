@@ -345,6 +345,7 @@ static int load_networks(FILE *sources, struct bpf_map *map,
     fprintf(stderr, "Resized map to %zu entries\n", networks->len);
     return 0;
 }
+
 static int load_networks_from_path(char *sources_filename, struct bpf_map *map,
                                    struct netlist *networks,
                                    struct netlist *parents)
