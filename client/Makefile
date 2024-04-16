@@ -1,7 +1,7 @@
-RESULT := result
+export PACKAGE_DIR ?= package
 
 .PHONY: deb
-deb: | docs $(RESULT)
+deb: | docs $(PACKAGE_DIR)
 	../scripts/package_deb
 
 .PHONY: docs
@@ -11,7 +11,7 @@ docs:
 .PHONY: clean
 clean:
 	find docs -name '*.[1-9]' -delete
-	rm -rf $(RESULT)
+	rm -rf $(PACKAGE_DIR)
 
-$(RESULT):
+$(PACKAGE_DIR):
 	mkdir -p $@

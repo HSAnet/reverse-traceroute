@@ -92,7 +92,7 @@ INCLUDES += -Icommon
 CFLAGS += -Wall
 
 $(server): traceroute.c $(skeleton) | $(LIBBPF)
-	$(CLANG) $(CFLAGS) $(CPPFLAGS) traceroute.c $(LIBBPF) $(INCLUDES) -I$(SKELETON_DIR) -D$(TRACEROUTE_AF) -o $@ -lelf -lz
+	$(CLANG) $(CFLAGS) $(CPPFLAGS) traceroute.c $(LIBBPF) $(INCLUDES) -I$(SKELETON_DIR) -D$(TRACEROUTE_AF) -o $@ -lelf -lz $(LDFLAGS)
 
 $(skeleton): $(BPF_PROG) | $(BPFTOOL) $(SKELETON_DIR)
 	$(BPFTOOL) gen skeleton $(BPF_PROG) > $@

@@ -59,14 +59,13 @@ class DiamondTopo(IPTopo):
 if __name__ == "__main__":
     net = IPNet(topo=DiamondTopo())
     try:
+        print("Starting integration tests")
         net.start()
 
-        print("Waiting 30 seconds for routes to converge..")
+        print("Waiting 30 seconds for routes to converge")
         time.sleep(30)
 
-        result_dir = Path(os.getcwd()) / "results"
-        shutil.rmtree(result_dir, ignore_errors=True)
-        os.mkdir(result_dir)
+        result_dir = Path("/results")
 
         for af in ("4", "6"):
             for proto in ("tcp", "udp", "icmp"):

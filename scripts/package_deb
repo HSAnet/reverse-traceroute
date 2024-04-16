@@ -2,7 +2,7 @@
 
 set -e
 
-RESULT="$(pwd)/result"
+PACKAGE_DIR="$(realpath "${PACKAGE_DIR:-$(pwd)/result}")"
 TEMP="$(mktemp -d)"
 DIRNAME="$(basename "$(pwd)")"
 USER="$(id -u -n)"
@@ -22,10 +22,10 @@ cp -r * "$WORKDIR"
 	cd "../$PACKAGE-$VERSION"
 
 	sudo pbuilder update
-	sudo pdebuild --buildresult "$RESULT" -- --use-network yes
-	sudo chown -R "$USER:$USER" "$RESULT"
+	sudo pdebuild --buildresult "$PACKAGE_DIR" -- --use-network yes
+	sudo chown -R "$USER:$USER" "$PACKAGE_DIR"
 )
 
 rm -rf "$TEMP"
-debsign --no-re-sign "$RESULT"/*.changes
-lintian -i -I --show-overrides "$RESULT"/*.changes
+debsign --no-re-sign "$PACKAGE_DIR"/*.changes
+lintian -i -I --show-overrides "$PACKAGE_DIR"/*.changes

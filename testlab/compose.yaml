@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  ipmininet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./test:/workspace
+      - ./packages:/packages
+      - ./results:/results
+    working_dir: /workspace
+    tty: true
+    privileged: true
+    network_mode: "host"
