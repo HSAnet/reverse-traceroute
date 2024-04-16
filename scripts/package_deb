@@ -2,7 +2,7 @@
 
 set -e
 
-PACKAGE_DIR="$(realpath "${PACKAGE_DIR:-$(pwd)/result}")"
+PACKAGE_DIR="$(realpath "${PACKAGE_DIR:-$(pwd)/package}")"
 TEMP="$(mktemp -d)"
 DIRNAME="$(basename "$(pwd)")"
 USER="$(id -u -n)"
