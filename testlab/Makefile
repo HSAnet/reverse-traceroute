@@ -16,4 +16,6 @@ $(RESULTS):
 
 .PHONY: clean
 clean:
-	sudo rm -rf $(PACKAGE_DIR) $(RESULTS)
+	sudo rm -rf $(RESULTS)
+	$(MAKE) -C ../client clean
+	$(MAKE) -C ../server clean
