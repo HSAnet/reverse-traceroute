@@ -38,7 +38,7 @@ trace towards the same target with overlapping local identifiers.
 
 As the global identifier is limited to 16 bits, the maximum number of allowed sessions is currently limited to 65535.
 Should newer kernel versions become more common, this limitation can be lifted to 65535 sessions per target,
-with no global upper limit. But due to the current limited _eBPF_ functionality, this is not yet feasable.
+with no global upper limit. But due to the current limited _eBPF_ functionality, this is not yet feasible.
 
 A probe with the requested protocol and flow is issued to the target, with the global identifier encoded inside the probe.
 When receiving a possible probe response, the global identifier is extracted and the associated session entry looked up.
