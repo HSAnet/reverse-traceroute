@@ -65,13 +65,13 @@ if __name__ == "__main__":
         print("Waiting 30 seconds for routes to converge")
         time.sleep(30)
 
-        result_dir = Path("/results")
+        RESULT_DIR = Path("/results")
 
         for af in ("4", "6"):
             for proto in ("tcp", "udp", "icmp"):
                 print(f"Running test with proto {proto} for IPv{af}")
 
-                path = result_dir / f"{proto}-v{af}"
+                path = RESULT_DIR / f"{proto}-v{af}"
                 os.mkdir(path)
 
                 server_log = open(path / "server.txt", "w")
