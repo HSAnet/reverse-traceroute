@@ -4,12 +4,12 @@ Priority: optional
 Maintainer: Valentin Heinrich <v.heinrich99@gmail.com>
 Build-Depends: clang,
                debhelper-compat (= 12),
-	       gcc-multilib,
+               gcc-multilib,
                libelf-dev,
                linux-headers-generic,
                llvm,
                pkg-config
-Standards-Version: 4.5.0
+Standards-Version: 4.7.0
 Homepage: https://github.com/HSAnet/reverse-traceroute
 
 Package: augsburg-traceroute-server
@@ -17,5 +17,5 @@ Architecture: any
 Multi-Arch: foreign
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: Contains the reverse-traceroute server binaries
- for both IPv4 and IPv6. The correspoding systemd service-templates
+ for both IPv4 and IPv6. The corresponding systemd service-templates
  are created as well.
