@@ -6,7 +6,7 @@ For detailed information about reverse traceroute and its concepts, have a look 
 This repository contains reference implementations for reverse traceroute client and server applications.  
 Both the protocol and tools are able to support IPv4 and IPv6.
 
-## The problem we want to solve
+## The Problem we want to solve
 Traceroute provides information on the forward path towards a target.
 As such, it is popular for troubleshooting problems on the forward path.
 Should a problem arise on the reverse path traceroute's output offers no help
@@ -17,7 +17,7 @@ Reverse traceroute allows you to determine the reverse path from a target host,
 which runs our server program, back to you,
 enabling you to detect and (hopefully) troubleshoot said issues.
 
-## Design goals
+## Design Goals
 Reverse traceroute was built in accordance with the following principles:
 
 1. No direct control over the remote host ✅  
@@ -73,12 +73,12 @@ sudo systemctl edit --full augsburg-traceroute-server-v6@<ifname>
 ```
 
 ## Indirect Tracing
-The protocol supports an extension that allows clients to request traceroute measurements to arbitrary targets.
-This feature is disabled by default and can be controlled on the server-side:  
+The protocol supports an extension that allows clients to request traceroute measurements to arbitrary targets.  
+**This feature is disabled by default** and can be controlled on the server-side:  
 You can restrict the networks from which such indirect tracing requests can be made by editing relevant configuration files and explicitly enabling indirect traces for the server.  
 For information on how to do this you can consult the augsburg-traceroute-server manpage.
 
-## Measurement study
+## Measurement Study
 We are trying to collect data about traceroute paths for our measurement study.
 If you want to participate, you can use the `--transmit` switch in the client
 to transmit your data to our server.  
@@ -87,13 +87,17 @@ Please be aware that the data includes hostnames by default.
 If you do not want to transmit resolved hostnames as part of the trace
 you can use the `--no-resolve` client switch.
 
-## Running a public endpoint
+## Running a public Endpoint
 Reverse traceroute was designed as a distributed service.
-Hence it lives from the people who decide to host publicly available server endpoints.
+Hence, it lives from the people who decide to host publicly available server endpoints.
 
 Should you decide to host such a reverse traceroute server,
 then please let us know so that we can add your server to the list of endpoints,
 which are maintained inside the `ENDPOINTS` file.
+
+## Future Work
+* Optimize the client
+* Add unit tests to client and server
 
 ## Disclaimer
 Both the client and the server are subject to change, as they are still early in development.
