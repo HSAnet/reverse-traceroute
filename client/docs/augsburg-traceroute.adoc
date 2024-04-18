@@ -107,7 +107,7 @@ can be tweaked via the options.
 
 *--flow*=<flow>::
 	Encode the specified 16-bit number into a field used to influence per-flow load-balancing in routers.
-	As the other header fields in the probes remain constant during the measurement this field basically influences
+	As the other relevant header fields in the probes remain constant during the measurement this field basically determines
 	which path will be discovered.
 
 *--probes*=<probes>::
@@ -133,6 +133,24 @@ can be tweaked via the options.
 	
 *--max-burst*=<probes>::
 	Send the probes in chunks at most the given number of probes.
+
+== Examples
+
+To discover multiple paths towards a destination with TCP, use the following command:
+[example]
+augsburg-traceroute forward tcp multipath <target>
+
+To discover only a single reverse path identified by flow 1234 with UDP back from a target:
+[example]
+augsburg-traceroute reverse udp singlepath --flow 1234 <target>
+
+To discover both reverse and forward paths with TCP and submit the results to our measurement study:
+[example]
+augsburg-traceroute --transmit two-way tcp multipath <target>
+
+To request an indirect trace from a remote endpoint towards an arbitrary target:
+[example]
+augsburg-traceroute --forward-to <target> reverse udp singlepath --flow 1234 <remote>
 
 == Exit status
 
