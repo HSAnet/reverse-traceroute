@@ -27,8 +27,7 @@ Reverse traceroute was built in accordance with the following principles:
 3. Deployable in today's Internet ✅  
     The messages sent by reverse traceroute should be able to traverse the Internet unaltered.
 4. Policable by network operators ✅  
-    Network operators who do not want reverse traceroute traffic inside their administrative domain
-    can easily enforce such restrictions.
+    Network operators who do not want reverse traceroute traffic inside their administrative domain can easily enforce such restrictions.
 5. Awareness of load balancing ✅  
     Reverse traceroute knows how to keep packets on a single path.
 6. No hackery (IP Spoofing / IP Options) ✅  
