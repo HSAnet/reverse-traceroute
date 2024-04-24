@@ -34,6 +34,15 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <linux/if_packet.h>
 #include <linux/pkt_cls.h>
 
+#if !defined IN6_IS_ADDR_V4MAPPED
+#define IN6_IS_ADDR_V4MAPPED(a)                                                \
+    ({                                                                         \
+        const struct in6_addr *__a = (const struct in6_addr *)(a);             \
+        __a->in6_u.u6_addr32[0] == 0 && __a->in6_u.u6_addr32[1] == 0 &&        \
+            __a->in6_u.u6_addr32[2] == bpf_htonl(0xffff);                      \
+    })
+#endif
+
 typedef int tc_action;
 
 static int parse_mp_hdr(struct cursor *cursor)
@@ -81,6 +90,8 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
                 return TC_ACT_SHOT;
 
 #if defined(TRACEROUTE_V4)
+            if (!IN6_IS_ADDR_V4MAPPED(addr))
+                return TC_ACT_SHOT;
             target = addr->in6_u.u6_addr32[3];
 #elif defined(TRACEROUTE_V6)
             target = *addr;
