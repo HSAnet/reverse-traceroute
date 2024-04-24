@@ -201,8 +201,9 @@ class ReverseProbeGen(AbstractProbeGen):
                 if status == 0x00:
                     address, rtt = struct.unpack("!16sI", load[4:24])
                     address = IPv6Address(address)
-                    if self.is_ipv4:
+                    if address.ipv4_mapped:
                         address = address.ipv4_mapped
+
                     return TracerouteResult(str(address), rtt / 1000000)
                 if status in self.STATUS_TO_EXCEPTION:
                     raise self.STATUS_TO_EXCEPTION[status]
