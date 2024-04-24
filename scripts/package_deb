@@ -4,29 +4,27 @@ set -e
 
 PACKAGE_DIR=$(realpath "${PACKAGE_DIR:-$(pwd)/package}")
 
-WORKDIR=$(mktemp -d)
-HOOKDIR=$(realpath "$(dirname "$0")")/hooks
-USER=$(id -u -n)
+work_dir=$(mktemp -d)
+hook_dir=$(realpath "$(dirname "$0")")/hooks
+user=$(id -u -n)
 
-echo "$HOOKDIR"
-
-cp -r "$(pwd)" "$WORKDIR/sources"
+cp -r "$(pwd)" "$work_dir/sources"
 
 (
-	cd "$WORKDIR/sources"
+	cd "$work_dir/sources"
 
-	VERSION=$(dpkg-parsechangelog --show-field Version | cut -d '-' -f 1)
-	PACKAGE=$(dpkg-parsechangelog --show-field Source)
+	version=$(dpkg-parsechangelog --show-field Version | cut -d '-' -f 1)
+	package=$(dpkg-parsechangelog --show-field Source)
 
 	debmake -yt
-	cd "../$PACKAGE-$VERSION"
+	cd "../$package-$version"
 
 	sudo pbuilder update
-	sudo pdebuild --buildresult "$PACKAGE_DIR" -- --use-network yes --hookdir "$HOOKDIR"
-	sudo chown -R "$USER:$USER" "$PACKAGE_DIR"	
+	sudo pdebuild --buildresult "$PACKAGE_DIR" -- --use-network yes --hookdir "$hook_dir"
+	sudo chown -R "$user:$user" "$PACKAGE_DIR"	
 )
 
 rm -f "$PACKAGE_DIR"/*_source.changes
-rm -rf "$WORKDIR"
+rm -rf "$work_dir"
 
-debsign --no-re-sign "$PACKAGE_DIR"/*.changes
+debsign "$PACKAGE_DIR"/*.changes
