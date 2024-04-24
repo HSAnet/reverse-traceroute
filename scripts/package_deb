@@ -2,21 +2,21 @@
 
 set -e
 
-PACKAGE_DIR="$(realpath "${PACKAGE_DIR:-$(pwd)/package}")"
-TEMP="$(mktemp -d)"
-DIRNAME="$(basename "$(pwd)")"
-USER="$(id -u -n)"
+PACKAGE_DIR=$(realpath "${PACKAGE_DIR:-$(pwd)/package}")
+TEMP=$(mktemp -d)
+DIRNAME=$(basename "$(pwd)")
+USER=$(id -u -n)
 
-WORKDIR="$TEMP/$DIRNAME"
+WORKDIR=$TEMP/$DIRNAME
 
 mkdir "$WORKDIR"
-cp -r * "$WORKDIR"
+cp -r ./* "$WORKDIR"
 
 (
 	cd "$WORKDIR"
 
-	VERSION="$(dpkg-parsechangelog --show-field Version | cut -d '-' -f 1)"
-	PACKAGE="$(dpkg-parsechangelog --show-field Source)"
+	VERSION=$(dpkg-parsechangelog --show-field Version | cut -d '-' -f 1)
+	PACKAGE=$(dpkg-parsechangelog --show-field Source)
 
 	debmake -yt
 	cd "../$PACKAGE-$VERSION"
