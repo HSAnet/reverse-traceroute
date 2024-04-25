@@ -11,7 +11,7 @@ command -v poetry >/dev/null 2>&1 || {
 }
 
 poetry install -n
-poetry run -n $SHELL <<- 'DONE'
+poetry run -n "$SHELL" <<- 'DONE'
 	CLIENT="$(which augsburg-traceroute)"
 	pyinstaller -F "$CLIENT" --distpath . --workpath="$(mktemp -d)" --specpath="$(mktemp -d)"
 DONE
