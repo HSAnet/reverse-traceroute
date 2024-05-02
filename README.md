@@ -95,8 +95,9 @@ then please let us know so that we can add your server to the list of endpoints,
 which are maintained inside the `ENDPOINTS` file.
 
 ## Future Work
-* Optimize the client
+* Add anti-amplification payload to requests
 * Add unit tests to client and server
+* Optimize the client
 
 ## Disclaimer
 Both the client and the server are subject to change, as they are still early in development.
