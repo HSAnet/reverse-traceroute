@@ -33,7 +33,7 @@ union trhdr {
     struct {
         __u8 state;
         __u8 err_msg_len;
-        __be16 reserved;
+        __be16 data;
     } response;
 } __attribute__((packed));
 

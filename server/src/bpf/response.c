@@ -54,7 +54,7 @@ static void response_init_icmp(__u16 session_id, struct icmphdr *icmp,
 
     tr->response.state = error;
     tr->response.err_msg_len = 0;
-    tr->response.reserved = value;
+    tr->response.data = value;
 }
 
 INTERNAL int response_create_err(struct cursor *cursor,
