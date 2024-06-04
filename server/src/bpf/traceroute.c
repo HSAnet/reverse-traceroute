@@ -54,6 +54,41 @@ static int parse_mp_hdr(struct cursor *cursor)
     return -1;
 }
 
+static int parse_mp_obj(struct cursor *cursor, const ipaddr_t *origin, ipaddr_t *target) {
+    struct icmp_extobj_hdr *obj;
+
+    if (PARSE(cursor, &obj) < 0)
+        return -1;
+
+    if (obj->class_num == 6 && obj->class_type == 0) {
+        __u16 len = bpf_ntohs(obj->length);
+        if (len < 4 || len > 10000)
+            return -1;
+
+        if (cursor_advance(cursor, len - 4) < 0)
+            return -1;
+    } else if (
+        obj->class_num == 5 && obj->class_type == 0 &&
+        CONFIG_INDIRECT_TRACE_ENABLED && bpf_ntohs(obj->length) == 16 &&
+        source_allowed_multipart(origin) == 0) {
+        struct in6_addr *addr;
+        if (PARSE(cursor, &addr) < 0)
+            return -1;
+
+#if defined(TRACEROUTE_V4)
+        if (!IN6_IS_ADDR_V4MAPPED(addr))
+            return -1;
+        *target = addr->in6_u.u6_addr32[3];
+#elif defined(TRACEROUTE_V6)
+        *target = *addr;
+#endif
+    } else {
+       return bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type);
+    }
+
+    return 0;
+}
+
 /*
  * Parses the reverse traceroute request header.
  * On a valid configuration state is created and a traceroute probe sent back to
@@ -76,31 +111,23 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
     __be16 session_id = (*icmp)->un.echo.id;
     ipaddr_t target = origin;
 
-    if (parse_mp_hdr(cursor) == 0) {
-        struct icmp_extobj_hdr *obj;
-        if (PARSE(cursor, &obj) < 0)
+    if (cursor_at_end(cursor) < 0) {
+        if (parse_mp_hdr(cursor) < 0)
             return TC_ACT_SHOT;
 
-        if (CONFIG_INDIRECT_TRACE_ENABLED &&
-            source_allowed_multipart(&origin) == 0 &&
-            bpf_ntohs(obj->length) == 16 && obj->class_num == 5 &&
-            obj->class_type == 0) {
-            struct in6_addr *addr;
-            if (PARSE(cursor, &addr) < 0)
+        for (int i = 0; i < 5; i++) {
+            int value = parse_mp_obj(cursor, &origin, &target);
+            if (value < 0)
                 return TC_ACT_SHOT;
-
-#if defined(TRACEROUTE_V4)
-            if (!IN6_IS_ADDR_V4MAPPED(addr))
-                return TC_ACT_SHOT;
-            target = addr->in6_u.u6_addr32[3];
-#elif defined(TRACEROUTE_V6)
-            target = *addr;
-#endif
-        } else {
-            err_args.error = ERR_MULTIPART_NOT_SUPPORTED;
-            err_args.value =
-                bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type);
-            goto error;
+            else if (value == 0) {
+                if (cursor_at_end(cursor) == 0)
+                    break;
+                continue;
+            } else {
+                err_args.error = ERR_MULTIPART_NOT_SUPPORTED;
+                err_args.value = value;
+                goto error;
+            }
         }
     }
 

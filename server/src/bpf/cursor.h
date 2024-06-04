@@ -50,6 +50,23 @@ static inline long cursor_end(const struct cursor *cursor)
     return cursor->skb->data_end;
 }
 
+static inline int cursor_at_end(const struct cursor *cursor)
+{
+    volatile long pos = (long)cursor->pos;
+    volatile long end = cursor_end(cursor);
+    
+    return (pos + 1 <= end) ? -1 : 0;
+}
+
+static inline int cursor_advance(struct cursor *cursor, __u16 length)
+{
+    if ((long)cursor->pos + length <= cursor_end(cursor)) {
+        cursor->pos = (void *)((long)cursor->pos + length);
+        return 0;
+    }
+    return -1;
+}
+
 static inline void cursor_reset(struct cursor *cursor)
 {
     cursor->pos = (void *)cursor_start(cursor);
