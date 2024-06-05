@@ -111,7 +111,7 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
     __be16 session_id = (*icmp)->un.echo.id;
     ipaddr_t target = origin;
 
-    if (cursor_at_end(cursor) < 0) {
+    if (cursor_at_end(cursor, *ip) < 0) {
         if (parse_mp_hdr(cursor) < 0)
             return TC_ACT_SHOT;
 
@@ -120,7 +120,7 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
             if (value < 0)
                 return TC_ACT_SHOT;
             else if (value == 0) {
-                if (cursor_at_end(cursor) == 0)
+                if (cursor_at_end(cursor, *ip) == 0)
                     break;
                 continue;
             } else {
@@ -132,8 +132,20 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
     }
 
     if (cursor->skb->len < CONFIG_MIN_REQUEST_LEN) {
+        const __u16 MIN_ETH_DATA = 46;
+
+        __u16 value = CONFIG_MIN_REQUEST_LEN - cursor->skb->len;
+        __u16 total_len = G_IP_LEN_WITH_HDR(**ip);
+        
+        // Ethernet frames require a minimum payload length of 46 bytes.
+        // Should the payload be smaller it will be padded to fit the requirements.
+        // In this case the client must also compensate for the automatically added padding.
+        // Curiously the size reported by skb->len does include the entire packet (with ethernet frame) but without the FCS.
+        if (total_len < MIN_ETH_DATA) 
+            value += (MIN_ETH_DATA - total_len);
+
         err_args.error = ERR_INSUFFICIENT_PADDING;
-        err_args.value = bpf_htons(CONFIG_MIN_REQUEST_LEN - cursor->skb->len);
+        err_args.value = bpf_htons(value);
         goto error;
     }
 

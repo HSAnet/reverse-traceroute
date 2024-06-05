@@ -21,6 +21,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #define BPF_CURSOR_H
 
 #include "ip_generic.h"
+#include <bpf/bpf_endian.h>
 #include <linux/bpf.h>
 
 struct cursor {
@@ -50,12 +51,19 @@ static inline long cursor_end(const struct cursor *cursor)
     return cursor->skb->data_end;
 }
 
-static inline int cursor_at_end(const struct cursor *cursor)
+static inline int cursor_at_end(const struct cursor *cursor, const iphdr_t *iphdr)
 {
-    volatile long pos = (long)cursor->pos;
-    volatile long end = cursor_end(cursor);
-    
-    return (pos + 1 <= end) ? -1 : 0;
+    long pos = (long)cursor->pos;
+
+    if (pos <= (long)iphdr)
+        return -1;
+
+    // We use the length as reported by the IP header to check if we reached the end.
+    // We can not rely on skb->len as it may not reflect the real payload length due to possible Ethernet padding.
+    long total_len = G_IP_LEN_WITH_HDR(*iphdr);
+    long bytes_from_ip = pos - (long)iphdr;
+
+    return (bytes_from_ip == total_len) ? 0 : -1;
 }
 
 static inline int cursor_advance(struct cursor *cursor, __u16 length)

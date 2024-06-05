@@ -27,6 +27,8 @@ typedef struct iphdr iphdr_t;
         (x).check = csum(&(x), sizeof(x), 0);                                  \
     }
 
+#define G_IP_LEN_WITH_HDR(x) bpf_ntohs((x).tot_len)
+
 #elif defined(TRACEROUTE_V6)
 typedef struct ipv6hdr iphdr_t;
 
@@ -46,6 +48,8 @@ typedef struct ipv6hdr iphdr_t;
 #define G_IP_CSUM_COMPUTE(x)                                                   \
     {                                                                          \
     }
+
+#define G_IP_LEN_WITH_HDR(x)    (bpf_ntohs((x).payload_len) + 40)
 #endif
 
 #endif

@@ -51,7 +51,7 @@ static inline int resize_l3hdr(struct cursor *cursor, __u16 probe_len,
 
 #if defined(TRACEROUTE_V4)
     (**ip).ihl = 5;
-    (**ip).tot_len = bpf_htons(cursor->skb->len - sizeof(**eth));
+    (**ip).tot_len = bpf_htons(sizeof(**ip) + probe_len);
 #elif defined(TRACEROUTE_V6)
     (**ip).payload_len = bpf_htons(probe_len);
 #endif
