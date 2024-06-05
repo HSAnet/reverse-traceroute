@@ -259,6 +259,7 @@ def main():
         except ReverseProbeGen.InvalidTtlException:
             pass
         except ReverseProbeGen.InsufficientPaddingException as e:
+            log.info(f"Endpoint requires {e.missing_bytes} more padding, adjusting value.")
             probe_gen.padding = e.missing_bytes
         except Exception as e:
             logging.error(e)
