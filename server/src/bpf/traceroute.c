@@ -54,7 +54,9 @@ static int parse_mp_hdr(struct cursor *cursor)
     return -1;
 }
 
-static int parse_mp_obj(struct cursor *cursor, const ipaddr_t *origin, ipaddr_t *target) {
+static int parse_mp_obj(struct cursor *cursor, const ipaddr_t *origin,
+                        ipaddr_t *target)
+{
     struct icmp_extobj_hdr *obj;
 
     if (PARSE(cursor, &obj) < 0)
@@ -67,10 +69,9 @@ static int parse_mp_obj(struct cursor *cursor, const ipaddr_t *origin, ipaddr_t 
 
         if (cursor_advance(cursor, len - 4) < 0)
             return -1;
-    } else if (
-        obj->class_num == 5 && obj->class_type == 0 &&
-        CONFIG_INDIRECT_TRACE_ENABLED && bpf_ntohs(obj->length) == 16 &&
-        source_allowed_multipart(origin) == 0) {
+    } else if (obj->class_num == 5 && obj->class_type == 0 &&
+               CONFIG_INDIRECT_TRACE_ENABLED && bpf_ntohs(obj->length) == 16 &&
+               source_allowed_multipart(origin) == 0) {
         struct in6_addr *addr;
         if (PARSE(cursor, &addr) < 0)
             return -1;
@@ -83,7 +84,7 @@ static int parse_mp_obj(struct cursor *cursor, const ipaddr_t *origin, ipaddr_t 
         *target = *addr;
 #endif
     } else {
-       return bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type);
+        return bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type);
     }
 
     return 0;
@@ -136,12 +137,14 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
 
         __u16 value = CONFIG_MIN_REQUEST_LEN - cursor->skb->len;
         __u16 total_len = G_IP_LEN_WITH_HDR(**ip);
-        
+
         // Ethernet frames require a minimum payload length of 46 bytes.
-        // Should the payload be smaller it will be padded to fit the requirements.
-        // In this case the client must also compensate for the automatically added padding.
-        // Curiously the size reported by skb->len does include the entire packet (with ethernet frame) but without the FCS.
-        if (total_len < MIN_ETH_DATA) 
+        // Should the payload be smaller it will be padded to fit the
+        // requirements. In this case the client must also compensate for the
+        // automatically added padding. Curiously the size reported by skb->len
+        // does include the entire packet (with ethernet frame) but without the
+        // FCS.
+        if (total_len < MIN_ETH_DATA)
             value += (MIN_ETH_DATA - total_len);
 
         err_args.error = ERR_INSUFFICIENT_PADDING;

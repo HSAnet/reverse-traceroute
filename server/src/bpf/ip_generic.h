@@ -2,6 +2,7 @@
 #define BPF_IP_GENERIC_H
 
 #include "ipaddr.h"
+#include <bpf/bpf_endian.h>
 #include <linux/in.h>
 #include <linux/icmp.h>
 #include <linux/if_ether.h>
@@ -49,7 +50,7 @@ typedef struct ipv6hdr iphdr_t;
     {                                                                          \
     }
 
-#define G_IP_LEN_WITH_HDR(x)    (bpf_ntohs((x).payload_len) + 40)
+#define G_IP_LEN_WITH_HDR(x) (bpf_ntohs((x).payload_len) + 40)
 #endif
 
 #endif
