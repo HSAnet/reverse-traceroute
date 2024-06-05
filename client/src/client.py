@@ -234,6 +234,7 @@ def main():
         traces["forward"] = root
     if args.direction in ("two-way", "reverse"):
         target_addr = None
+
         if args.forward_to and args.direction == "reverse":
             is_ipv4 = isinstance(ip_address(remote_addr), IPv4Address)
             af_selector = (is_ipv4, not is_ipv4)
@@ -257,6 +258,8 @@ def main():
             probe_gen.parse_probe_response(req, resp)
         except ReverseProbeGen.InvalidTtlException:
             pass
+        except ReverseProbeGen.InsufficientPaddingException as e:
+            probe_gen.padding = e.missing_bytes
         except Exception as e:
             logging.error(e)
             sys.exit()
