@@ -7,6 +7,7 @@ typedef enum {
     ERR_PROTO = 0x02,
     ERR_FLOW = 0x03,
     ERR_MULTIPART_NOT_SUPPORTED = 0x04,
+    ERR_INSUFFICIENT_PADDING = 0x05,
 } tr_error;
 
 #endif

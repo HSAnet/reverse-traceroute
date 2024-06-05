@@ -131,6 +131,12 @@ static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
         }
     }
 
+    if (cursor->skb->len < CONFIG_MIN_REQUEST_LEN) {
+        err_args.error = ERR_INSUFFICIENT_PADDING;
+        err_args.value = bpf_htons(CONFIG_MIN_REQUEST_LEN - cursor->skb->len);
+        goto error;
+    }
+
     __u16 global_id;
     // Pop a new session identifier from queue.
     // All error branches must return the identifier to the queue.

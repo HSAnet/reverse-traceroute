@@ -38,4 +38,7 @@ extern volatile const bool CONFIG_INDIRECT_TRACE_ENABLED;
 #define DEFAULT_TCP_SYN_ENABLED true
 extern volatile const bool CONFIG_TCP_SYN_ENABLED;
 
+#define DEFAULT_MIN_REQUEST_LEN 200
+extern volatile const __u16 CONFIG_MIN_REQUEST_LEN;
+
 #endif
