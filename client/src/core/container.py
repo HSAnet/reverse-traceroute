@@ -18,8 +18,6 @@ If not, see <https://www.gnu.org/licenses/>.
 import logging
 from typing import Generator
 from collections.abc import MutableSet, Mapping
-from itertools import groupby, product
-from functools import reduce
 from itertools import chain
 
 

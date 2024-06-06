@@ -20,7 +20,7 @@ import argparse
 import json
 import socket
 from itertools import compress, groupby, pairwise
-from ipaddress import ip_address, IPv4Address, IPv6Address
+from ipaddress import ip_address, IPv4Address
 from concurrent.futures import ThreadPoolExecutor
 
 from scapy.sendrecv import sr1
@@ -81,7 +81,7 @@ def create_measurement_args(args: argparse.Namespace) -> dict:
 
 def create_measurement(
     args: argparse.Namespace,
-    traces: dict[str, TracerouteVertex],
+    traces: dict[str, nx.DiGraph],
     hostnames: dict[str, str],
 ):
     return {
@@ -96,7 +96,7 @@ def create_measurement(
     }
 
 
-def resolve_hostnames(root: TracerouteVertex) -> dict[str, str]:
+def resolve_hostnames(root: nx.DiGraph) -> dict[str, str]:
     """Map IP addresses to hostnames for a root vertex and its children."""
 
     def resolve(address: str):
@@ -152,7 +152,7 @@ def discover(
     remote_addr: str,
     min_ttl: int,
     max_ttl: int,
-) -> TracerouteVertex:
+) -> nx.DiGraph:
     if isinstance(ip_address(remote_addr), IPv4Address):
         route = route_conf.route.route
     else:
