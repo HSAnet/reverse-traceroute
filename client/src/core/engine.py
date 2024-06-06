@@ -174,8 +174,6 @@ class MultipathEngine(AbstractEngine):
         self,
         confidence: float,
         retry: int,
-        min_burst: int,
-        max_burst: int,
         opt_single_vertex_hop: bool,
         inter: float,
         timeout: float,
@@ -186,9 +184,6 @@ class MultipathEngine(AbstractEngine):
         self.confidence = confidence
         assert retry >= 0
         self.retry = retry
-        assert min_burst > 0 and min_burst < max_burst
-        self.min_burst = min_burst
-        self.max_burst = max_burst
         self.opt_single_vertex_hop = opt_single_vertex_hop
 
     def __send_probes_to_hop(
@@ -200,36 +195,28 @@ class MultipathEngine(AbstractEngine):
         identifiers each round."""
 
         ttl = hop.ttl
-        chunk_size = self.min_burst
 
         retry_counter = 0
         unresp_flows = set(flows)
 
         while unresp_flows:
             log.debug(f"Attempting to send {len(unresp_flows)} probes to {hop}")
+            flows = list(unresp_flows)
+            probes = [probe_generator.create_probe(ttl, flow) for flow in flows]
+            
+            ans, unans = sr(
+                probes, inter=self.inter, timeout=self.timeout, verbose=0
+            )
 
-            iter_flows = iter(list(unresp_flows))
-            while chunk := list(islice(iter_flows, chunk_size)):
-                log.debug(f"Using chunk size {chunk_size}")
+            for req, resp in ans:
+                flow = flows[probes.index(req)]
+                address, rtt = probe_generator.parse_probe_response(req, resp)
+                vertex = TracerouteVertex(address)
 
-                probes = [probe_generator.create_probe(ttl, flow) for flow in chunk]
-                ans, unans = sr(
-                    probes, inter=self.inter, timeout=self.timeout, verbose=0
-                )
+                hop.add_or_update(vertex, flow, rtt)
+                unresp_flows.discard(flow)
 
-                for req, resp in ans:
-                    flow = chunk[probes.index(req)]
-                    address, rtt = probe_generator.parse_probe_response(req, resp)
-                    vertex = TracerouteVertex(address)
-
-                    hop.add_or_update(vertex, flow, rtt)
-                    unresp_flows.discard(flow)
-
-                log.debug(f"Received {len(ans)}/{len(probes)} responses")
-                if len(ans) == chunk_size:
-                    chunk_size = min(self.max_burst, chunk_size * 2)
-                else:
-                    chunk_size = self.min_burst
+            log.debug(f"Received {len(ans)}/{len(probes)} responses")
 
             if retry_counter >= abs(self.retry):
                 log.warn("Exceeded retry limit, breaking from send loop")
