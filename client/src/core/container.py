@@ -71,7 +71,6 @@ class TracerouteVertex:
         self.address = address
         self.flow_set = set()
         self.rtt_list = list()
-        self.successors = set()
 
         # The shadow flow set contains flows
         # which never really reached the vertex but
@@ -83,112 +82,28 @@ class TracerouteVertex:
     def flows(self):
         """Returns the current flow set, including the shadow flows."""
         return self.flow_set | self.shadow_flow_set
+    
+    def links(self, other: "TracerouteVertex") -> list[tuple["TracerouteVertex", "TracerouteVertex"]]:
+        assert isinstance(other, TracerouteHop)
+        edges = []
+
+        for next_vertex in other:
+            if self.flows & next_vertex.flows:
+                edges.append((self, next_vertex))
+
+        return edges
 
     def update(self, flow: int, rtt: int):
         """Update the flow identifier and rtt measurements for a vertex."""
         self.flow_set.add(flow)
         self.rtt_list.append(rtt)
 
-    def add_successor(self, other: "TracerouteVertex"):
-        """Adds a successor to the vertex.
-        The successors predecessor is updates as well."""
-        if not other in self.successors:
-            log.debug(f"Adding {other} as successor of {self}")
-            if other == self:
-                log.warning(f"Successor {other} is equal to its predecessor")
-            self.successors.add(other)
-            return True
-
-        return False
-
-    def del_successor(self, other: "TracerouteVertex"):
-        """Deletes a predecessor of the vertex."""
-        self.successors.remove(other)
-
-    def flatten(self) -> Generator["TracerouteVertex", None, None]:
-        """Return a flattened sequence of vertices with unique ID's."""
-        identifiers = set()
-
-        def _flatten(vertex):
-            if id(vertex) not in identifiers:
-                identifiers.add(id(vertex))
-                yield vertex
-            for next_vertex in vertex.successors:
-                if id(next_vertex) not in identifiers:
-                    yield from _flatten(next_vertex)
-
-        yield from _flatten(self)
-
-    def paths(self, on_loop="skip") -> Generator[list["TracerouteVertex"], None, None]:
-        """Return all paths from start to finish."""
-
-        def _paths(vertex, path=[]):
-            path = list(path)
-
-            if vertex in path:
-                match on_loop:
-                    case "break": return
-                    case "yield": yield path
-                    case "skip":
-                        loop_start = path.index(vertex)
-                        # When traversing a merged graph, the same address refers to the same object.
-                        # In that case a loop will never reach an end.
-                        # To skip a loop in a merged graph, we simply have to stop processing it.
-                        # For example, the unmerged graph
-                        #
-                        #   'a -> b -> c -> a -> b -> c -> d'
-                        #
-                        # would result in the merged graph
-                        #
-                        #   'a -> b -> c -> d'.
-                        #    ^         |
-                        #    |_________|
-                        #
-                        # When following the (c,a) link we encounter the same 'a' a second time.
-                        # When we simply ignore this path, the next successor of 'c' will be processed,
-                        # effectivly resulting in the sequence 'a -> b -> c -> e', thus skipping the loop.
-                        if id(vertex) == id(path[loop_start]):
-                            return
-                        path = path[:loop_start]
-
-            path.append(vertex)
-            if not vertex.successors:
-                yield path
-            for next_vertex in vertex.successors:
-                yield from _paths(next_vertex, path)
-
-        yield from _paths(self)
-
-    def _merge(self, other: "TracerouteVertex") -> "TracerouteVertex":
-        assert self == other
-        log.debug(f"Merging {self} with {other}")
-
-        self.successors.update(other.successors)
-        # Due to GRE-Tunneling or Unequal-Cost-Load-Balancing the same vertex
-        # may appear in successive hops with equal flows.
-        # We get rid of such artefacts by removing self from our own successors,
-        # thus breaking the circular link.
-        # See: https://community.cisco.com/t5/routing/tracert-show-same-hop-twice/td-p/1502358
-        self.successors.discard(self)
+    def merge_from(self, other: "TracerouteVertex"):
+        assert(other == self)
         self.flow_set.update(other.flow_set)
         self.shadow_flow_set.update(other.shadow_flow_set)
         self.rtt_list.extend(other.rtt_list)
 
-        return self
-
-    def merge(self):
-        """Merges duplicate vertices encountered in a trace.
-        Duplicates vertices can occur in the presence of Unequal-Cost-Load-Balancing.
-        This method can create hard loops, traverse the sequence with care.
-        It is recommended to use the 'paths' method, which can deal with loops in a configurable way."""
-        buckets = [list(g) for k, g in groupby(sorted(self.flatten(), key=hash))]
-        reduced_buckets = [reduce(lambda a, b: a._merge(b), group) for group in buckets]
-
-        for vertex in reduced_buckets:
-            for v in vertex.successors.copy():
-                # Rewire all successors to equal objects in the merged list
-                vertex.del_successor(v)
-                vertex.add_successor(reduced_buckets[reduced_buckets.index(v)])
 
     def to_dict(self) -> dict:
         return {
@@ -196,8 +111,7 @@ class TracerouteVertex:
             "hash": hash(self),
             "address": self.address,
             "rtt": list(self.rtt_list),
-            "flows": list(self.flow_set),
-            "successors": list(map(id, self.successors)),
+            "flows": list(self.flows),
         }
 
     @property
@@ -227,9 +141,7 @@ class BlackHoleVertex(TracerouteVertex):
     def __init__(self, predecessor: TracerouteVertex):
         super().__init__("***")
         self.predecessor = predecessor
-        predecessor.add_successor(self)
-        self.shadow_flow_set.update(predecessor.flow_set)
-        self.shadow_flow_set.update(predecessor.shadow_flow_set)
+        self.shadow_flow_set.update(predecessor.flows)
 
     def __eq__(self, other: TracerouteVertex):
         return isinstance(other, TracerouteVertex) and hash(self) == hash(other)
@@ -256,6 +168,10 @@ class TracerouteHop(HashSet):
 
         self[vertex].update(flow, rtt)
 
+    def dangling_vertices(self, next_hop: "TracerouteHop") -> list[TracerouteVertex]:
+        flows = next_hop.flows
+        return [v for v in self if v.flows.isdisjoint(flows)]
+
     @property
     def flows(self):
         return set(chain(*(v.flows for v in self)))
@@ -267,17 +183,14 @@ class TracerouteHop(HashSet):
     def first(self) -> TracerouteVertex:
         return next(iter(self))
 
-    def connectTo(self, other: TracerouteVertex):
+    def links(self, other: TracerouteVertex) -> list[tuple[TracerouteVertex, TracerouteVertex]]:
         assert isinstance(other, TracerouteHop)
-        new_links = 0
+        edges = []
 
-        for vertex, next_vertex in product(self, other):
-            if not vertex.flows & next_vertex.flows:
-                continue
-            if vertex.add_successor(next_vertex):
-                new_links += 1
+        for vertex in self:
+            edges.extend(vertex.links(other))
 
-        return new_links
-
+        return edges
+    
     def __repr__(self):
         return f"Hop(ttl={self.ttl}, len={len(self)})"

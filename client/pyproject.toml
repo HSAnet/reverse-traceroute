@@ -12,6 +12,7 @@ python = "^3.10"
 scapy = "^2.4.5"
 graphviz = "^0.20.1"
 requests = "^2.28.1"
+networkx = "^3.3"
 
 [tool.poetry.dev-dependencies]
 

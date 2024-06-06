@@ -25,6 +25,7 @@ from typing import Generator
 from collections.abc import Iterable
 from functools import reduce
 from scapy.sendrecv import sr
+import networkx as nx
 
 from .container import TracerouteVertex, BlackHoleVertex, TracerouteHop
 from .mda import stopping_point
@@ -55,7 +56,7 @@ class AbstractEngine:
         probe_generator: AbstractProbeGen,
         hop: TracerouteHop,
         next_hop: TracerouteHop,
-    ):
+    ) -> list[tuple[TracerouteVertex, TracerouteVertex]]:
         raise NotImplementedError
 
     def discover(
@@ -65,7 +66,7 @@ class AbstractEngine:
         max_ttl: int,
         first_hop: str,
         target: str = None,
-    ) -> TracerouteVertex:
+    ) -> nx.DiGraph:
         """The main discovery logic of the traceroute engines.
         It proceeds until the target is hit (if defined) or successive identical
         vertices possibly intermixed with black holes are found in a length
@@ -73,7 +74,9 @@ class AbstractEngine:
         assert min_ttl > 0 and max_ttl >= min_ttl
 
         root = TracerouteVertex(first_hop)
-        addresses = lambda hop: set(v.address for v in hop)
+        
+        G = nx.DiGraph()
+        G.add_node(id(root), object=root)
         hop = TracerouteHop(0, [root])
 
         unresponsive = 0
@@ -82,16 +85,27 @@ class AbstractEngine:
         for ttl in range(min_ttl, max_ttl + 1):
             log.info(f"Probing hop with TTL {ttl}")
             next_hop = TracerouteHop(ttl)
-            self._probe_and_update(probe_generator, hop, next_hop)
+
+            links = self._probe_and_update(probe_generator, hop, next_hop)
+            for u, v in links:
+                G.add_node(id(u), object=u)
+                G.add_node(id(v), object=v)
+                G.add_edge(id(u), id(v), strong=False if u.flow_set.isdisjoint(v.flow_set) else True)
 
             # Connect all vertices without successors to a newly created
             # black hole, which inherits the flows of its predecessors.
             # Thus we can chain multiple black holes by flow inheritance,
             # which can be reconnected once a successor vertex with a matching flow is found.
-            dangling_vertices = [v for v in hop if not v.successors]
+            dangling_vertices = hop.dangling_vertices(next_hop)
             for v in dangling_vertices:
-                black_hole = BlackHoleVertex(v)
-                next_hop.add(black_hole)
+                hole = BlackHoleVertex(v)
+                next_hop.add(hole)
+
+                G.add_node(id(v), object=v)
+                G.add_node(id(hole), object=hole)
+                G.add_edge(id(v), id(hole), strong=False)
+
+                log.debug(f"Added {hole} to {next_hop}")
 
             # Check if the abort condition is met.
             # If multiple successive black holes possibly intermixed with a single vertex
@@ -124,11 +138,7 @@ class AbstractEngine:
 
             hop = next_hop
 
-        # Track back to the last known vertex and disconnect
-        # successive black holes if such a vertex is known.
-        if last_known_vertex is not None:
-            last_known_vertex.successors.clear()
-        return root
+        return G
 
 
 class SinglepathEngine(AbstractEngine):
@@ -148,7 +158,7 @@ class SinglepathEngine(AbstractEngine):
         probe_generator: AbstractProbeGen,
         hop: TracerouteHop,
         next_hop: TracerouteHop,
-    ):
+    ) -> list[tuple[TracerouteVertex, TracerouteVertex]]:
         probes = [
             probe_generator.create_probe(next_hop.ttl, self.flow)
             for _ in range(self.probes_per_hop)
@@ -162,7 +172,7 @@ class SinglepathEngine(AbstractEngine):
             next_hop.add_or_update(vertex, self.flow, rtt)
 
         hop.first().flow_set.add(self.flow)
-        hop.connectTo(next_hop)
+        return hop.links(next_hop)
 
 
 class MultipathEngine(AbstractEngine):
@@ -204,7 +214,7 @@ class MultipathEngine(AbstractEngine):
             flows = list(unresp_flows)
             probes = [probe_generator.create_probe(ttl, flow) for flow in flows]
             
-            ans, unans = sr(
+            ans, _ = sr(
                 probes, inter=self.inter, timeout=self.timeout, verbose=0
             )
 
@@ -223,10 +233,10 @@ class MultipathEngine(AbstractEngine):
                 break
             retry_counter += 1
 
-    def __nprobes(self, hop: TracerouteHop) -> int:
+    def __nprobes(self, hop: TracerouteHop, next_hop: TracerouteHop) -> int:
         """Computes the number of flows needed for the next hop."""
         probes = lambda v: stopping_point(
-            max(1, len(v.successors)) + 1, self.confidence
+            max(1, len(v.links(next_hop))) + 1, self.confidence
         )
 
         total_flows = len(hop.flows)
@@ -238,7 +248,7 @@ class MultipathEngine(AbstractEngine):
                 max_probes = result
         return max_probes
 
-    def __generate_flows(self, hop: TracerouteHop) -> Generator[set[int], None, None]:
+    def __generate_flows(self, hop: TracerouteHop, next_hop: TracerouteHop) -> Generator[set[int], None, None]:
         """Generates flow sets until an optimal stopping point is reached."""
 
         def generate():
@@ -248,7 +258,7 @@ class MultipathEngine(AbstractEngine):
         start = 0
         flow_generator = generate()
 
-        while (stop := self.__nprobes(hop)) > start:
+        while (stop := self.__nprobes(hop, next_hop)) > start:
             yield set(islice(flow_generator, stop - start))
             start = stop
 
@@ -257,9 +267,12 @@ class MultipathEngine(AbstractEngine):
         probe_generator: AbstractProbeGen,
         hop: TracerouteHop,
         next_hop: TracerouteHop,
-    ):
+    ) -> list[tuple[TracerouteVertex, TracerouteVertex]]:
         """Probes a pair of hops and connects their vertices to each other."""
-        for flows in self.__generate_flows(hop):
+        n_links = 0
+        links = []
+
+        for flows in self.__generate_flows(hop, next_hop):
             # Send probes to the next hop first.
             # For the path A -> B -> C -> D this leads to the following probing pattern:
             # "B -> A -> C -> B -> D -> C" instead of
@@ -297,6 +310,11 @@ class MultipathEngine(AbstractEngine):
             # with each answered probe, resulting in statistically more probes needed for the rate-limited node
             # to reach it's successors.
             # By stopping the probing when no new links were detected in an iteration said problem is eliminated.
-            if hop.connectTo(next_hop) == 0:
+            links = hop.links(next_hop)
+            if len(links) == n_links:
                 log.warn("No more links detected. Breaking from send loop.")
                 break
+
+            n_links = len(links)
+        
+        return links

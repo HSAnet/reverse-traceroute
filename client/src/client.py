@@ -19,13 +19,14 @@ import logging
 import argparse
 import json
 import socket
-from itertools import compress
+from itertools import compress, groupby, pairwise
 from ipaddress import ip_address, IPv4Address, IPv6Address
 from concurrent.futures import ThreadPoolExecutor
 
 from scapy.sendrecv import sr1
 from scapy.route import conf as route_conf
 from scapy.config import conf as scapy_conf
+import networkx as nx
 import graphviz
 
 from .core.engine import AbstractEngine, SinglepathEngine, MultipathEngine
@@ -88,7 +89,7 @@ def create_measurement(
         "traces": {
             # Store the measurement raw (not merged).
             # Should the merge logic change in the future, past measurements remain valid.
-            direction: [v.to_dict() for v in trace.flatten()]
+            direction: [attr["object"].to_dict() for _, attr in trace.nodes(data=True)]
             for direction, trace in traces.items()
         },
         "hostnames": hostnames,
@@ -108,7 +109,7 @@ def resolve_hostnames(root: TracerouteVertex) -> dict[str, str]:
             return False, None
 
     resolve_table = {}
-    nodes = set(v for v in root.flatten() if not isinstance(v, BlackHoleVertex))
+    nodes = set(attr["object"] for _, attr in root.nodes(data=True) if not isinstance(attr["object"], BlackHoleVertex))
     # Perform DNS lookup for IP addresses by concurrently calling
     # the resolve function.
 
@@ -169,7 +170,7 @@ def discover(
 
 
 def render_graph(
-    traces: dict[str, TracerouteVertex],
+    traces: dict[str, nx.Graph],
     hostnames: dict[str, str],
     output: str,
     merge: bool,
@@ -178,7 +179,16 @@ def render_graph(
     for direction, trace in traces.items():
         with parent.subgraph(name=f"cluster_{direction}") as g:
             if merge:
-                trace.merge()
+                key = lambda x: hash(x[1]["object"])
+                equal_nodes = [ list(v) for _, v in groupby(sorted(trace.nodes(data=True), key=key), key=key) ]
+                for group in equal_nodes:
+                    print(f"{list(group)=}")
+                    for (id_a, attr_a), (id_b, attr_b) in pairwise(group):
+                        obj_a = attr_a["object"]
+                        obj_b = attr_b["object"]
+                        obj_b.merge_from(obj_a)
+                        nx.contracted_nodes(trace, id_b, id_a, copy=False, self_loops=False)
+                
             g.node_attr.update(style="filled")
             g.attr(label=direction.upper())
             create_graph(g, trace, hostnames)
@@ -194,7 +204,7 @@ def try_getaddrinfo(target: str, family: int) -> tuple[bool, tuple]:
 
 def try_find_target(target: str, is_v4_v6: tuple[bool, bool]) -> tuple[bool, str]:
     try:
-        return str(ip_address(args.target))
+        return str(ip_address(target))
     except:
         af_families = [socket.AF_INET, socket.AF_INET6]
         selectors = list(is_v4_v6) if any(is_v4_v6) else [True, True]

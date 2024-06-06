@@ -16,21 +16,23 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 
 from graphviz import Digraph
+import networkx as nx
 from .core.container import TracerouteVertex
 
 
-def create_graph(graph: Digraph, root: TracerouteVertex, hostnames: dict[str, str]):
+def create_graph(graph: Digraph, root: nx.DiGraph, hostnames: dict[str, str]):
     """Create a digraph from the root vertex."""
-    nodes = list(root.flatten())
-
-    for node in nodes:
+    for id_n, attr_n in root.nodes(data=True):
+        node = attr_n["object"]
+        print(node)
         label = "\n".join(
             (node.address, f"{node.rtt:.2f}", *hostnames.get(node.address, [""]))
         )
-        graph.node(str(id(node)), label=label)
-    for node in nodes:
-        for next_node in node.successors:
-            attr = {
-                "color": "black" if node.flow_set & next_node.flow_set else "orange"
-            }
-            graph.edge(str(id(node)), str(id(next_node)), **attr)
+        graph.node(str(id_n), label=label)
+
+    for (id_a, id_b, attr) in root.edges(data=True):
+
+        attr = {
+            "color": "black" if attr["strong"] else "orange"
+        }
+        graph.edge(str(id_a), str(id_b), **attr)
