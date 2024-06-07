@@ -27,7 +27,7 @@ from functools import reduce
 from scapy.sendrecv import sr
 import networkx as nx
 
-from .container import TracerouteVertex, BlackHoleVertex, TracerouteHop
+from .container import TracerouteVertex, BlackHoleVertex, TracerouteHop, Unique
 from .mda import stopping_point
 from .probe_gen import AbstractProbeGen
 
@@ -76,7 +76,7 @@ class AbstractEngine:
         root = TracerouteVertex(first_hop)
         
         G = nx.DiGraph()
-        G.add_node(id(root), object=root)
+        G.add_node(Unique(root), object=root)
         hop = TracerouteHop(0, [root])
 
         unresponsive = 0
@@ -88,9 +88,9 @@ class AbstractEngine:
 
             links = self._probe_and_update(probe_generator, hop, next_hop)
             for u, v in links:
-                G.add_node(id(u), object=u)
-                G.add_node(id(v), object=v)
-                G.add_edge(id(u), id(v), strong=False if u.flow_set.isdisjoint(v.flow_set) else True)
+                G.add_node(Unique(u))
+                G.add_node(Unique(v))
+                G.add_edge(Unique(u), Unique(v), strong=False if u.flow_set.isdisjoint(v.flow_set) else True)
 
             # Connect all vertices without successors to a newly created
             # black hole, which inherits the flows of its predecessors.
@@ -100,11 +100,10 @@ class AbstractEngine:
             for v in dangling_vertices:
                 hole = BlackHoleVertex(v)
                 next_hop.add(hole)
-
-                G.add_node(id(v), object=v)
-                G.add_node(id(hole), object=hole)
-                G.add_edge(id(v), id(hole), strong=False)
-
+                G.add_node(Unique(hole), object=hole)
+                G.add_node(Unique(v))          
+                G.add_edge(Unique(v), Unique(hole), strong=False)
+                
                 log.debug(f"Added {hole} to {next_hop}")
 
             # Check if the abort condition is met.

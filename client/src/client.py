@@ -89,7 +89,7 @@ def create_measurement(
         "traces": {
             # Store the measurement raw (not merged).
             # Should the merge logic change in the future, past measurements remain valid.
-            direction: [attr["object"].to_dict() for _, attr in trace.nodes(data=True)]
+            direction: [node.value.to_dict() for node in trace.nodes]
             for direction, trace in traces.items()
         },
         "hostnames": hostnames,
@@ -109,7 +109,7 @@ def resolve_hostnames(root: nx.DiGraph) -> dict[str, str]:
             return False, None
 
     resolve_table = {}
-    nodes = set(attr["object"] for _, attr in root.nodes(data=True) if not isinstance(attr["object"], BlackHoleVertex))
+    nodes = set(node.value for node in root.nodes if not isinstance(node.value, BlackHoleVertex))
     # Perform DNS lookup for IP addresses by concurrently calling
     # the resolve function.
 
@@ -179,15 +179,13 @@ def render_graph(
     for direction, trace in traces.items():
         with parent.subgraph(name=f"cluster_{direction}") as g:
             if merge:
-                key = lambda x: hash(x[1]["object"])
-                equal_nodes = [ list(v) for _, v in groupby(sorted(trace.nodes(data=True), key=key), key=key) ]
+                key = lambda x: hash(x.value)
+                equal_nodes = [ list(v) for _, v in groupby(sorted(trace.nodes, key=key), key=key) ]
                 for group in equal_nodes:
                     print(f"{list(group)=}")
-                    for (id_a, attr_a), (id_b, attr_b) in pairwise(group):
-                        obj_a = attr_a["object"]
-                        obj_b = attr_b["object"]
-                        obj_b.merge_from(obj_a)
-                        nx.contracted_nodes(trace, id_b, id_a, copy=False, self_loops=False)
+                    for a, b in pairwise(group):
+                        b.value.merge_from(a.value)
+                        nx.contracted_nodes(trace, b, a, copy=False, self_loops=False)
                 
             g.node_attr.update(style="filled")
             g.attr(label=direction.upper())

@@ -22,17 +22,15 @@ from .core.container import TracerouteVertex
 
 def create_graph(graph: Digraph, root: nx.DiGraph, hostnames: dict[str, str]):
     """Create a digraph from the root vertex."""
-    for id_n, attr_n in root.nodes(data=True):
-        node = attr_n["object"]
-        print(node)
+    for node in root.nodes:
         label = "\n".join(
-            (node.address, f"{node.rtt:.2f}", *hostnames.get(node.address, [""]))
+            (node.value.address, f"{node.value.rtt:.2f}", *hostnames.get(node.value.address, [""]))
         )
-        graph.node(str(id_n), label=label)
+        graph.node(str(node.id), label=label)
 
-    for (id_a, id_b, attr) in root.edges(data=True):
-
+    for (node_a, node_b, attr) in root.edges(data=True):
+        print(node_a, node_b)
         attr = {
             "color": "black" if attr["strong"] else "orange"
         }
-        graph.edge(str(id_a), str(id_b), **attr)
+        graph.edge(str(node_a.id), str(node_b.id), **attr)

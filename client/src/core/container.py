@@ -192,3 +192,21 @@ class TracerouteHop(HashSet):
     
     def __repr__(self):
         return f"Hop(ttl={self.ttl}, len={len(self)})"
+
+
+class Unique:
+    def __init__(self, value):
+        self.value = value
+
+    def __eq__(self, other):
+        return id(self.value) == id(other.value)
+
+    def __hash__(self):
+        return hash(id(self.value))
+    
+    def __repr__(self):
+        return f"Unique({self.value=}, {id(self.value)=})"
+    
+    @property
+    def id(self):
+        return id(self.value)
