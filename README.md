@@ -38,27 +38,13 @@ Reverse traceroute was built in accordance with the following principles:
     Reverse traceroute behaves just like regular traceroute. You can send UDP, TCP and ICMP probes and expect both node address and Round-Trip-Time as a measurement.
 
 ## Installation
-We provide Debian packages for Ubuntu 22.04 LTS for both client and server.  
-First add the repository's signing key to your trusted keyrings:
-```
-curl https://deb.net.hs-augsburg.de/signing_key.gpg -o /etc/apt/trusted.gpg.d/deb.net.hs-augsburg.de.gpg
-```
-
-Then the repository itself can be added by appending the following lines to your `/etc/apt/sources.list`:
-```
-# Augsburg Traceroute
-deb [ signed-by=/etc/apt/trusted.gpg.d/deb.net.hs-augsburg.de.gpg ] http://deb.net.hs-augsburg.de jammy/
-```
-
-Finally, the packages can be installed with the following command:
-```
-sudo apt update
-sudo apt install augsburg-traceroute-client augsburg-traceroute-server
-```
+Local Debian packages can be built by invoking `make` inside the [client](client) and [server](server) directories respectively. This step requiries [pbuilder](https://manpages.debian.org/bookworm/pbuilder/pbuilder.8.en.html) to be installed and configured on your system, as to allow for a build inside a chrooted environment. Make sure to configure pbuilder to use an image matching your current distribution.  
+When the build process finishes, you will find the packages in the `packages/` subdirectory.
 
 ## Running as a service
 To easily integrate the server into the system we provide systemd-service templates
-with the Debian package. You can enable and start the service on an interface with the following command:
+with the Debian package.  
+After the installation, you can enable and start the service on an interface with the following command:
 
 ```
 sudo systemctl enable --now augsburg-traceroute-server-v4@<ifname>
@@ -95,7 +81,6 @@ then please let us know so that we can add your server to the list of endpoints,
 which are maintained inside the `ENDPOINTS` file.
 
 ## Future Work
-* Add anti-amplification payload to requests
 * Add unit tests to client and server
 * Optimize the client
 
