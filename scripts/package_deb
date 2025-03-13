@@ -27,4 +27,4 @@ cp -r "$(pwd)" "$work_dir/sources"
 rm -f "$PACKAGE_DIR"/*_source.changes
 rm -rf "$work_dir"
 
-debsign "$PACKAGE_DIR"/*.changes
+#debsign "$PACKAGE_DIR"/*.changes
