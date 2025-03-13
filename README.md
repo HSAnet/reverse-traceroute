@@ -63,15 +63,6 @@ The protocol supports an extension that allows clients to request traceroute mea
 You can restrict the networks from which such indirect tracing requests can be made by editing relevant configuration files and explicitly enabling indirect traces for the server.  
 For information on how to do this you can consult the augsburg-traceroute-server manpage.
 
-## Measurement Study
-We are trying to collect data about traceroute paths for our measurement study.
-If you want to participate, you can use the `--transmit` switch in the client
-to transmit your data to our server.  
-
-Please be aware that the data includes hostnames by default.
-If you do not want to transmit resolved hostnames as part of the trace
-you can use the `--no-resolve` client switch.
-
 ## Running a public Endpoint
 Reverse traceroute was designed as a distributed service.
 Hence, it lives from the people who decide to host publicly available server endpoints.
