@@ -69,7 +69,7 @@ Hence, it lives from the people who decide to host publicly available server end
 
 Should you decide to host such a reverse traceroute server,
 then please let us know so that we can add your server to the list of endpoints,
-which are maintained inside the `ENDPOINTS` file.
+which are maintained inside the [ENDPOINTS](ENDPOINTS) file.
 
 ## Future Work
 * Add unit tests to client and server
