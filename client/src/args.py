@@ -65,12 +65,6 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "-y",
-        "--assume-yes",
-        action="store_true",
-        help="Skip confirmation prompts and run the program in batch mode.",
-    )
-    parser.add_argument(
         "-n",
         "--no-resolve",
         action="store_true",
@@ -114,11 +108,6 @@ def parse_arguments() -> argparse.Namespace:
         "--store-json",
         action="store_true",
         help="Store statistics as a json file.",
-    )
-    stats_group.add_argument(
-        "--transmit",
-        action="store_true",
-        help="Submit the statistics to HSA-Net for their measurement study.",
     )
 
     parser.add_argument(

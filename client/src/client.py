@@ -35,7 +35,6 @@ from .core.probe_gen import AbstractProbeGen, ClassicProbeGen, ReverseProbeGen
 from .core.container import TracerouteVertex, BlackHoleVertex
 from .graph import create_graph
 from .args import parse_arguments
-from .transmit import transmit_measurement
 
 from .core.apar import apar
 
@@ -124,12 +123,6 @@ def resolve_hostnames(root: TracerouteVertex) -> dict[str, str]:
                 resolve_table[node.address] = hostname
 
     return resolve_table
-
-
-def prompt_confirm(prompt: str):
-    """Prints a prompt to stdout and asks for user confirmation [Yes/No]"""
-    choice = input(prompt + "\nDo you want to proceed [Yes/No]: ").lower()
-    return choice == "y" or choice == "yes"
 
 
 def create_probing_engine(args: argparse.Namespace):
@@ -299,24 +292,6 @@ def main():
     if args.store_json:
         with open(f"{args.output}.json", "w") as writer:
             json.dump(measurement, writer, indent=4)
-    if args.transmit:
-        transmit = args.assume_yes or prompt_confirm(
-            "Due to the --transmit flag, "
-            + "your data will be uploaded to the HSA-Net group."
-        )
-        if transmit:
-            try:
-                transmit_measurement(measurement)
-            except Exception as e:
-                print("Failed to submit measurement data!")
-                print(e)
-            else:
-                print(
-                    "Successfully transmitted your data!"
-                    + " Thank you for contributing to our measurement study."
-                )
-        else:
-            print("Aborting transmission!")
 
     # Finally, render the graph.
     render_graph(traces, hostnames, args.output, args.format, not args.no_merge)
