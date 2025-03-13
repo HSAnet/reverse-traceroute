@@ -71,9 +71,6 @@ can be tweaked via the options.
 *--max-ttl*=<TTL>::
 	Stop probing at the given TTL.
 
-*-y*, *--assume-yes*::
-	Run in noninteractive mode, assume yes as the answer for possible prompts.
-
 *--no-merge*::
 	Do not merge hops with the same address but different TTL values.
 	This may lead to multiple occurrences of the same node in the graph
@@ -143,10 +140,6 @@ augsburg-traceroute forward tcp multipath <target>
 To discover only a single reverse path identified by flow 1234 with UDP back from a target:
 [example]
 augsburg-traceroute reverse udp singlepath --flow 1234 <target>
-
-To discover both reverse and forward paths with TCP and submit the results to our measurement study:
-[example]
-augsburg-traceroute --transmit two-way tcp multipath <target>
 
 To request an indirect trace from a remote endpoint towards an arbitrary target:
 [example]
