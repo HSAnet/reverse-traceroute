@@ -84,10 +84,11 @@ class TracerouteVertex:
         """Returns the current flow set, including the shadow flows."""
         return self.flow_set | self.shadow_flow_set
 
-    def update(self, flow: int, rtt: int):
+    def update(self, flow: int, rtt: int | None):
         """Update the flow identifier and rtt measurements for a vertex."""
         self.flow_set.add(flow)
-        self.rtt_list.append(rtt)
+        if rtt is not None:
+            self.rtt_list.append(rtt)
 
     def add_successor(self, other: "TracerouteVertex"):
         """Adds a successor to the vertex.
@@ -204,9 +205,9 @@ class TracerouteVertex:
         }
 
     @property
-    def rtt(self) -> float:
+    def rtt(self) -> float | None:
         if not self.rtt_list:
-            return 0
+            return None
         return sum(self.rtt_list) / len(self.rtt_list)
 
     # __eq__ and __hash__ are needed to store instances of TracerouteVertex in sets.

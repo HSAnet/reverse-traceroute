@@ -204,6 +204,8 @@ class ReverseProbeGen(AbstractProbeGen):
     def parse_probe_response(
         self, request: Packet, response: Packet
     ) -> TracerouteResult:
+        all_bits_set = lambda n: n > 0 and (n & (n + 1)) == 0
+
         icmp = response.getlayer(1)
         response_type = 0 if self.is_ipv4 else 129
 
@@ -219,7 +221,9 @@ class ReverseProbeGen(AbstractProbeGen):
                         address = IPv6Address(address)
                         if address.ipv4_mapped:
                             address = address.ipv4_mapped
-                        return TracerouteResult(str(address), rtt / 1000000)
+
+                        rtt = rtt / 1000000 if not all_bits_set(rtt) else None
+                        return TracerouteResult(str(address), rtt)
                     case 1: raise self.InvalidTtlException()
                     case 2: raise self.InvalidProtocolException()
                     case 3: raise self.InvalidFlowException()

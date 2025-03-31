@@ -25,7 +25,7 @@ def create_graph(graph: Digraph, root: TracerouteVertex, hostnames: dict[str, st
 
     for node in nodes:
         label = "\n".join(
-            (node.address, f"{node.rtt:.2f}", *hostnames.get(node.address, [""]))
+            (node.address, f"{node.rtt:.2f}" if node.rtt is not None else "-", *hostnames.get(node.address, [""]))
         )
         graph.node(str(id(node)), label=label)
     for node in nodes:
