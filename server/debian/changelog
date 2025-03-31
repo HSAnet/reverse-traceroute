@@ -1,12 +1,5 @@
-augsburg-traceroute-server (0.3.0-2) jammy; urgency=medium
-
-  * Removed manpage links for individual binaries, reverted back to single
-    manpage. 
-
- -- Valentin Heinrich <valentin.heinrich@hs-augsburg.de>  Wed, 24 Apr 2024 16:14:17 +0200
-
-augsburg-traceroute-server (0.3.0-1) jammy; urgency=low
+augsburg-traceroute-server (0.1.0-0) jammy noble; urgency=medium
 
   * Initial release.
 
- -- Valentin Heinrich <v.heinrich99@gmail.com>  Mon, 24 Jul 2023 19:50:29 +0200
+ -- Valentin Heinrich <valentin.heinrich@hs-augsburg.de>  Mon, 31 Mar 2025 14:54:59 +0200
