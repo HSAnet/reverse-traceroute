@@ -5,7 +5,7 @@ RESULTS := results
 test: $(PACKAGE_DIR)
 	sudo rm -rf $(RESULTS)
 	sudo mkdir $(RESULTS)
-	sudo docker-compose run --build ipmininet ./test.sh
+	sudo docker-compose run ipmininet ./test.sh
 
 $(PACKAGE_DIR):
 	$(MAKE) -C ../client
