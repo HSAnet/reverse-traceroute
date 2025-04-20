@@ -84,10 +84,11 @@ class TracerouteVertex:
         """Returns the current flow set, including the shadow flows."""
         return self.flow_set | self.shadow_flow_set
 
-    def update(self, flow: int, rtt: int):
+    def update(self, flow: int, rtt: int | None):
         """Update the flow identifier and rtt measurements for a vertex."""
         self.flow_set.add(flow)
-        self.rtt_list.append(rtt)
+        if rtt is not None:
+            self.rtt_list.append(rtt)
 
     def add_successor(self, other: "TracerouteVertex"):
         """Adds a successor to the vertex.
@@ -127,8 +128,10 @@ class TracerouteVertex:
 
             if vertex in path:
                 match on_loop:
-                    case "break": return
-                    case "yield": yield path
+                    case "break":
+                        return
+                    case "yield":
+                        yield path
                     case "skip":
                         loop_start = path.index(vertex)
                         # When traversing a merged graph, the same address refers to the same object.
@@ -180,7 +183,8 @@ class TracerouteVertex:
         """Merges duplicate vertices encountered in a trace.
         Duplicates vertices can occur in the presence of Unequal-Cost-Load-Balancing.
         This method can create hard loops, traverse the sequence with care.
-        It is recommended to use the 'paths' method, which can deal with loops in a configurable way."""
+        It is recommended to use the 'paths' method, which can deal with loops in a configurable way.
+        """
         buckets = [list(g) for k, g in groupby(sorted(self.flatten(), key=hash))]
         reduced_buckets = [reduce(lambda a, b: a._merge(b), group) for group in buckets]
 
@@ -201,9 +205,9 @@ class TracerouteVertex:
         }
 
     @property
-    def rtt(self) -> float:
+    def rtt(self) -> float | None:
         if not self.rtt_list:
-            return 0
+            return None
         return sum(self.rtt_list) / len(self.rtt_list)
 
     # __eq__ and __hash__ are needed to store instances of TracerouteVertex in sets.
@@ -267,7 +271,7 @@ class TracerouteHop(HashSet):
     def first(self) -> TracerouteVertex:
         return next(iter(self))
 
-    def connectTo(self, other: TracerouteVertex):
+    def connectTo(self, other: "TracerouteHop"):
         assert isinstance(other, TracerouteHop)
         new_links = 0
 

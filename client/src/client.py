@@ -19,6 +19,8 @@ import logging
 import argparse
 import json
 import socket
+import sys
+from functools import partial
 from itertools import compress
 from ipaddress import ip_address, IPv4Address, IPv6Address
 from concurrent.futures import ThreadPoolExecutor
@@ -33,7 +35,6 @@ from .core.probe_gen import AbstractProbeGen, ClassicProbeGen, ReverseProbeGen
 from .core.container import TracerouteVertex, BlackHoleVertex
 from .graph import create_graph
 from .args import parse_arguments
-from .transmit import transmit_measurement
 
 from .core.apar import apar
 
@@ -124,12 +125,6 @@ def resolve_hostnames(root: TracerouteVertex) -> dict[str, str]:
     return resolve_table
 
 
-def prompt_confirm(prompt: str):
-    """Prints a prompt to stdout and asks for user confirmation [Yes/No]"""
-    choice = input(prompt + "\nDo you want to proceed [Yes/No]: ").lower()
-    return choice == "y" or choice == "yes"
-
-
 def create_probing_engine(args: argparse.Namespace):
     cls_args = {
         "inter": args.inter,
@@ -149,27 +144,14 @@ def create_probing_engine(args: argparse.Namespace):
         return SinglepathEngine(args.flow, args.probes, **cls_args)
 
 
-def discover(
-    engine: AbstractEngine,
-    probe_generator: AbstractProbeGen,
+def local_addr(
     remote_addr: str,
-    min_ttl: int,
-    max_ttl: int,
-) -> TracerouteVertex:
+) -> str:
     if isinstance(ip_address(remote_addr), IPv4Address):
         route = route_conf.route.route
     else:
         route = route_conf.route6.route
-    local_addr = route(remote_addr)[1]
-
-    if isinstance(probe_generator, ClassicProbeGen):
-        first_hop = local_addr
-        destination = remote_addr
-    else:
-        first_hop = remote_addr
-        destination = local_addr
-
-    return engine.discover(probe_generator, min_ttl, max_ttl, first_hop, destination)
+    return route(remote_addr)[1]
 
 
 def render_graph(
@@ -190,27 +172,29 @@ def render_graph(
     parent.render(output, format=format, cleanup=True)
 
 
-def try_getaddrinfo(target: str, family: int) -> tuple[bool, tuple]:
+def try_getaddrinfo(target: str, family: int) -> tuple | None:
     try:
-        return True, socket.getaddrinfo(target, None, family)[0]
+        return socket.getaddrinfo(target, None, family)[0]
     except:
-        return False, None
+        return None
 
 
-def try_find_target(target: str, is_v4_v6: tuple[bool, bool]) -> tuple[bool, str]:
+def try_resolve_host(host: str, is_v4_v6: tuple[bool, bool]) -> str | None:
     try:
-        return str(ip_address(args.target))
+        return str(ip_address(host))
     except:
         af_families = [socket.AF_INET, socket.AF_INET6]
         selectors = list(is_v4_v6) if any(is_v4_v6) else [True, True]
 
         for af in compress(af_families, selectors):
-            valid, result = try_getaddrinfo(target, af)
-            if valid:
-                *_, sockaddr = result
-                return True, sockaddr[0]
+            result = try_getaddrinfo(host, af)
+            if result:
+                *_, (address, *_) = result
+                log.info(f"Resolved '{host}' to '{address}'")
+                return address
 
-        return False, None
+        log.error(f"Failed to resolve '{host}'")
+        return None
 
 
 def main():
@@ -224,22 +208,34 @@ def main():
         }[args.log_level]
     )
 
-    valid, target = try_find_target(args.target, (args.ipv4, args.ipv6))
-    if not valid:
-        log.error(f"Failed to resolve '{args.target}'")
-        exit()
-    else:
-        log.info(f"Determined traceroute target: {target}")
+    remote_addr = try_resolve_host(args.target, (args.ipv4, args.ipv6))
+    if not remote_addr:
+        sys.exit()
 
     engine = create_probing_engine(args)
+    discover = partial(engine.discover, args.min_ttl, args.max_ttl)
     traces = {}
 
+    if args.forward_to and args.direction != "reverse":
+        log.warn(
+            "Ignoring the '--forward-to' flag as its usage is limited to reverse-only traces."
+        )
+
     if args.direction in ("two-way", "forward"):
-        probe_gen = ClassicProbeGen(target, args.protocol)
-        root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
+        probe_gen = ClassicProbeGen(remote_addr, args.protocol)
+        root = discover(probe_gen, local_addr(remote_addr), remote_addr)
         traces["forward"] = root
     if args.direction in ("two-way", "reverse"):
-        probe_gen = ReverseProbeGen(target, args.protocol)
+        target_addr = None
+
+        if args.forward_to and args.direction == "reverse":
+            is_ipv4 = isinstance(ip_address(remote_addr), IPv4Address)
+            af_selector = (is_ipv4, not is_ipv4)
+            target_addr = try_resolve_host(args.forward_to, af_selector)
+            if not target_addr:
+                sys.exit()
+
+        probe_gen = ReverseProbeGen(remote_addr, args.protocol, target_addr)
 
         # By requesting a probe with a TTL of 0 an error condition is created.
         # A reverse traceroute server will reply with a status code 1,
@@ -250,16 +246,19 @@ def main():
         resp = sr1(req, retry=3, timeout=args.timeout, verbose=0)
         if not resp:
             log.error("The target did not respond to the reverse traceroute probe.")
-            exit()
+            sys.exit()
         try:
             probe_gen.parse_probe_response(req, resp)
         except ReverseProbeGen.InvalidTtlException:
             pass
+        except ReverseProbeGen.InsufficientPaddingException as e:
+            log.info(f"Endpoint requires {e.missing_bytes} more padding, adjusting value.")
+            probe_gen.padding = e.missing_bytes
         except Exception as e:
             logging.error(e)
-            exit()
+            sys.exit()
 
-        root = discover(engine, probe_gen, target, args.min_ttl, args.max_ttl)
+        root = discover(probe_gen, remote_addr, target_addr)
         traces["reverse"] = root
 
     # Resolve hostnames
@@ -270,7 +269,9 @@ def main():
 
     # Resolve aliases
     if args.resolve_aliases:
-        if args.direction == "two-way" and isinstance(ip_address(target), IPv4Address):
+        if args.direction == "two-way" and isinstance(
+            ip_address(remote_addr), IPv4Address
+        ):
             alias_buckets = apar(traces["forward"], traces["reverse"])
             with open(f"{args.output}" + ".aliases", "w") as f:
                 f.write(
@@ -291,24 +292,6 @@ def main():
     if args.store_json:
         with open(f"{args.output}.json", "w") as writer:
             json.dump(measurement, writer, indent=4)
-    if args.transmit:
-        transmit = args.assume_yes or prompt_confirm(
-            "Due to the --transmit flag, "
-            + "your data will be uploaded to the HSA-Net group."
-        )
-        if transmit:
-            try:
-                transmit_measurement(measurement)
-            except Exception as e:
-                print("Failed to submit measurement data!")
-                print(e)
-            else:
-                print(
-                    "Successfully transmitted your data!"
-                    + " Thank you for contributing to our measurement study."
-                )
-        else:
-            print("Aborting transmission!")
 
     # Finally, render the graph.
     render_graph(traces, hostnames, args.output, args.format, not args.no_merge)

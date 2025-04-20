@@ -1,14 +1,21 @@
-.PHONY: test server client clean
-test: server client
-	vagrant up
-	-vagrant ssh default -c "sudo bash /reverse-traceroute/testlab/run_test.sh"
-	vagrant halt
+export PACKAGE_DIR := $(abspath packages)
+RESULTS := results
 
-server:
-	$(MAKE) -C ../server/src OUTDIR=..
+.PHONY: test
+test: $(PACKAGE_DIR)
+	sudo rm -rf $(RESULTS)
+	sudo mkdir $(RESULTS)
+	sudo docker-compose run ipmininet ./test.sh
 
-client:
-	cd ../client && poetry build -f wheel
+$(PACKAGE_DIR):
+	$(MAKE) -C ../client
+	$(MAKE) -C ../server
 
+$(RESULTS):
+	mkdir $@
+
+.PHONY: clean
 clean:
-	rm -f *.pcapng *.txt *.pdf
+	sudo rm -rf $(RESULTS)
+	$(MAKE) -C ../client clean
+	$(MAKE) -C ../server clean

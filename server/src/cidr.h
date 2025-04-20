@@ -1,0 +1,79 @@
+#ifndef CIDR_H
+#define CIDR_H
+
+#include "ipaddr.h"
+#include "net.h"
+#include <linux/types.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <stdlib.h>
+#include <string.h>
+
+enum cidr_parse_error {
+    CIDR_ERR_FORMAT = 1,
+    CIDR_ERR_PREFIX = 2,
+    CIDR_ERR_PREFIXLEN = 3,
+    CIDR_ERR_ADDRESS = 4,
+    CIDR_ERR_HOSTBITS = 5,
+};
+
+/**
+ * @brief Parses a network string in CIDR notation and returns a network
+ * structure.
+ *
+ * @param addr_family The address family, AF_INET or AF_INET6.
+ * @param str The null-terminated network string in CIDR notation.
+ * @param net A pointer to a valid memory location that will contain the
+ * resulting network structure on success.
+ * @return 0 on success, a negative errorcode on failure.
+ */
+static int parse_cidr(int addr_family, const char *str, struct network *net)
+{
+    char *cidr = strdup(str);
+
+    char *address_start = strtok(cidr, "/");
+    char *prefixlen_start = strtok(NULL, "/");
+
+    if (!prefixlen_start || strtok(NULL, "/")) {
+        free(cidr);
+        return -CIDR_ERR_FORMAT;
+    }
+
+    char *endptr;
+    unsigned long prefixlen = strtoul(prefixlen_start, &endptr, 0);
+    if (*endptr != '\0' || endptr == prefixlen_start) {
+        free(cidr);
+        return -CIDR_ERR_PREFIX;
+    }
+
+    if (prefixlen > sizeof(ipaddr_t) * 8) {
+        free(cidr);
+        return -CIDR_ERR_PREFIXLEN;
+    }
+
+    ipaddr_t address;
+    if (inet_pton(addr_family, address_start, &address) == 0) {
+        free(cidr);
+        return -CIDR_ERR_ADDRESS;
+    }
+    free(cidr);
+
+    ipaddr_t netmask;
+    for (int i = 0; i < sizeof(netmask); i++) {
+        __u8 *netmask_bytes = (__u8 *)&netmask;
+        __u8 *address_bytes = (__u8 *)&address;
+
+        int nbits = (prefixlen < 8) ? prefixlen : 8;
+        netmask_bytes[i] = (__u16)0xff << (8 - nbits);
+        prefixlen -= nbits;
+
+        if ((address_bytes[i] & netmask_bytes[i]) != address_bytes[i])
+            return -CIDR_ERR_HOSTBITS;
+    }
+
+    net->address = address;
+    net->netmask = netmask;
+    return 0;
+}
+
+#endif

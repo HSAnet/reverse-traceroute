@@ -18,17 +18,77 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "cursor.h"
+#include "config.h"
 #include "logging.h"
 #include "probe.h"
 #include "proto.h"
 #include "response.h"
 #include "session.h"
+#include "source.h"
 #include "ip_generic.h"
+#include "tr_error.h"
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 #include <linux/bpf.h>
+#include <linux/icmp.h>
 #include <linux/if_packet.h>
 #include <linux/pkt_cls.h>
+
+#if !defined IN6_IS_ADDR_V4MAPPED
+#define IN6_IS_ADDR_V4MAPPED(a)                                                \
+    ({                                                                         \
+        const struct in6_addr *__a = (const struct in6_addr *)(a);             \
+        __a->in6_u.u6_addr32[0] == 0 && __a->in6_u.u6_addr32[1] == 0 &&        \
+            __a->in6_u.u6_addr32[2] == bpf_htonl(0xffff);                      \
+    })
+#endif
+
+typedef int tc_action;
+
+static int parse_mp_hdr(struct cursor *cursor)
+{
+    struct icmp_ext_hdr *multipart_hdr;
+
+    if (PARSE(cursor, &multipart_hdr) == 0 && multipart_hdr->version == 2)
+        return 0;
+    return -1;
+}
+
+static int parse_mp_obj(struct cursor *cursor, const ipaddr_t *origin,
+                        ipaddr_t *target)
+{
+    struct icmp_extobj_hdr *obj;
+
+    if (PARSE(cursor, &obj) < 0)
+        return -1;
+
+    if (obj->class_num == 6 && obj->class_type == 0) {
+        __u16 len = bpf_ntohs(obj->length);
+        if (len < 4 || len > 10000)
+            return -1;
+
+        if (cursor_advance(cursor, len - 4) < 0)
+            return -1;
+    } else if (obj->class_num == 5 && obj->class_type == 0 &&
+               CONFIG_INDIRECT_TRACE_ENABLED && bpf_ntohs(obj->length) == 16 &&
+               source_allowed_multipart(origin) == 0) {
+        struct in6_addr *addr;
+        if (PARSE(cursor, &addr) < 0)
+            return -1;
+
+#if defined(TRACEROUTE_V4)
+        if (!IN6_IS_ADDR_V4MAPPED(addr))
+            return -1;
+        *target = addr->in6_u.u6_addr32[3];
+#elif defined(TRACEROUTE_V6)
+        *target = *addr;
+#endif
+    } else {
+        return bpf_htons((__u16)(obj->class_num) << 8 | obj->class_type);
+    }
+
+    return 0;
+}
 
 /*
  * Parses the reverse traceroute request header.
@@ -36,44 +96,111 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
  * the originator. Otherwise a response notifying the originator about the
  * invalid configuration is dispatched.
  */
-static int handle_request(struct cursor *cursor, struct ethhdr **eth,
-                          iphdr_t **ip, struct icmphdr **icmp)
+static tc_action handle_request(struct cursor *cursor, struct ethhdr **eth,
+                                iphdr_t **ip, struct icmphdr **icmp)
 {
-    int err;
-    union trhdr *tr;
-    struct probe_args probe_args;
-
-    struct session_key session = {.padding = 0};
-    struct session_state state = {.timestamp_ns = bpf_ktime_get_ns()};
-
-    if (PARSE(cursor, &tr) < 0)
-        return TC_ACT_OK;
-
-    session.addr = (*ip)->saddr;
-    session.identifier = (*icmp)->un.echo.id;
-
-    probe_args.ttl = tr->request.ttl;
-    probe_args.proto = tr->request.proto;
-    probe_args.probe.flow = tr->request.flow;
-    probe_args.probe.identifier = (*icmp)->un.echo.id;
-
-    if ((err = probe_create(cursor, &probe_args, eth, ip)) < 0)
+    ipaddr_t origin = (**ip).saddr;
+    if (source_allowed(&origin) < 0)
         return TC_ACT_SHOT;
 
-    if (err == ERR_NONE) {
-        if (session_add(&session, &state) < 0)
+    union trhdr *tr;
+    if (PARSE(cursor, &tr) < 0)
+        return TC_ACT_SHOT;
+
+    // Set on error condition
+    struct response_err_args err_args = {.padding = 0, .error = 0, .value = 0};
+    __be16 session_id = (*icmp)->un.echo.id;
+    ipaddr_t target = origin;
+
+    if (cursor_at_end(cursor, *ip) < 0) {
+        if (parse_mp_hdr(cursor) < 0)
             return TC_ACT_SHOT;
-    } else {
-        if (response_create_err(cursor, &session, err, eth, ip) < 0)
-            return TC_ACT_SHOT;
+
+        for (int i = 0; i < 5; i++) {
+            int value = parse_mp_obj(cursor, &origin, &target);
+            if (value < 0)
+                return TC_ACT_SHOT;
+            else if (value == 0) {
+                if (cursor_at_end(cursor, *ip) == 0)
+                    break;
+                continue;
+            } else {
+                err_args.error = ERR_MULTIPART_NOT_SUPPORTED;
+                err_args.value = value;
+                goto error;
+            }
+        }
     }
 
+    if (cursor->skb->len < CONFIG_MIN_REQUEST_LEN) {
+        const __u16 MIN_ETH_DATA = 46;
+
+        __u16 value = CONFIG_MIN_REQUEST_LEN - cursor->skb->len;
+        __u16 total_len = G_IP_LEN_WITH_HDR(**ip);
+
+        // Ethernet frames require a minimum payload length of 46 bytes.
+        // Should the payload be smaller it will be padded to fit the
+        // requirements. In this case the client must also compensate for the
+        // automatically added padding. Curiously the size reported by skb->len
+        // does include the entire packet (with ethernet frame) but without the
+        // FCS.
+        if (total_len < MIN_ETH_DATA)
+            value += (MIN_ETH_DATA - total_len);
+
+        err_args.error = ERR_INSUFFICIENT_PADDING;
+        err_args.value = bpf_htons(value);
+        goto error;
+    }
+
+    __u16 global_id;
+    // Pop a new session identifier from queue.
+    // All error branches must return the identifier to the queue.
+    if (session_find_target_id(&target, &global_id) < 0)
+        return TC_ACT_SHOT;
+
+    struct probe_args args = {
+        .ttl = tr->request.ttl,
+        .proto = tr->request.proto,
+        .probe.flow = tr->request.flow,
+        .probe.identifier = global_id,
+    };
+
+    if ((err_args.error = probe_create(cursor, &args, eth, ip, &target)) < 0)
+        goto drop;
+
+    if (err_args.error == ERR_NONE) {
+        struct session_key session = SESSION_NEW_KEY(target, global_id);
+        struct session_state state =
+            SESSION_NEW_STATE(bpf_ktime_get_ns(), origin, session_id);
+
+        if (session_add(&session, &state) < 0)
+            goto drop;
+
+        goto redirect;
+    }
+
+    session_return_id(global_id);
+
+error:;
+    struct response_args resp_args = {
+        .session_id = session_id,
+        .origin = origin,
+    };
+    if (response_create_err(cursor, &resp_args, &err_args, eth, ip) < 0)
+        return TC_ACT_SHOT;
+redirect:
     return bpf_redirect(cursor->skb->ifindex, 0);
+
+drop:
+    session_return_id(global_id);
+    return TC_ACT_SHOT;
 }
 
 static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
                                iphdr_t **ip)
 {
+    __u8 dummy;
+
     if (bpf_clone_redirect(cursor->skb, cursor->skb->ifindex, BPF_F_INGRESS) <
         0)
         return -1;
@@ -81,7 +208,7 @@ static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
     cursor_reset(cursor);
     if (PARSE(cursor, eth) < 0)
         return -1;
-    if (PARSE_IP(cursor, ip) < 0)
+    if (PARSE_IP(cursor, ip, &dummy) < 0)
         return -1;
 
     return 0;
@@ -94,36 +221,28 @@ static int skb_copy_to_ingress(struct cursor *cursor, struct ethhdr **eth,
  * In the latter case, an answer to the originator is created
  * and associated state cleaned up.
  */
-static int handle(struct cursor *cursor)
+static tc_action handle(struct cursor *cursor)
 {
-    int ret;
-    __u8 proto;
-    __u8 is_request;
-
-    struct session_key session = {.padding = 0};
-    struct session_state *state;
-
-    struct cursor l3_cursor;
-
     struct ethhdr *eth;
     iphdr_t *ip;
+    __u8 proto;
 
     if (PARSE(cursor, &eth) < 0)
         goto pass;
-    if (PARSE_IP(cursor, &ip) < 0)
+    if (PARSE_IP(cursor, &ip, &proto) < 0)
         goto pass;
 
     // Initialize variables to default values.
     // These will be overwritten if a nested ICMP-packet is received.
-    is_request = 0;
-    session.addr = ip->saddr;
-    proto = IP_NEXTHDR(*ip);
+    __u8 is_request = 0;
+    ipaddr_t target = ip->saddr;
 
     if (proto == G_PROTO_ICMP) {
         struct icmphdr *icmp;
 
         // Clone the cursor before parsing the ICMP-header.
         // It may be reset to this position later.
+        struct cursor l3_cursor;
         cursor_clone(cursor, &l3_cursor);
 
         if (PARSE(cursor, &icmp) < 0)
@@ -134,30 +253,29 @@ static int handle(struct cursor *cursor)
         } else if ((icmp->type == G_ICMP_TIME_EXCEEDED && icmp->code == 0) ||
                    icmp->type == G_ICMP_DEST_UNREACH) {
             iphdr_t *inner_ip;
-            if ((ret = PARSE_IP(cursor, &inner_ip)) < 0)
+            if (PARSE_IP(cursor, &inner_ip, &proto) < 0)
                 goto pass;
 
-            proto = IP_NEXTHDR(*inner_ip);
-            session.addr = inner_ip->daddr;
+            target = inner_ip->daddr;
             is_request = 1;
         } else {
             // Reset cursor in front of the ICMP header, so it can be properly
             // parsed.
-            cursor = &l3_cursor;
+            *cursor = l3_cursor;
         }
     }
 
     // Check if the packet could be an answer to a probe.
-    if ((ret = probe_match(cursor, proto, is_request)) < 0)
+    __u32 identifier;
+    if (probe_match(cursor, proto, is_request, &identifier) < 0)
         goto pass;
-    session.identifier = ret;
 
-    state = session_find(&session);
+    struct session_key session = SESSION_NEW_KEY(target, identifier);
+    struct session_state *state = session_find_delete(&session);
     if (!state)
         goto drop;
 
     log_message(SESSION_PROBE_ANSWERED, &session);
-    session_delete(&session);
 
     // When a direct TCP response was received that matched a session entry,
     // just pass a copy to the ingress path of our associated interface after
@@ -169,19 +287,26 @@ static int handle(struct cursor *cursor)
         if (skb_copy_to_ingress(cursor, &eth, &ip) < 0)
             goto drop;
 
+    struct response_args args = {
+        .session_id = state->local_identifier,
+        .origin = state->origin,
+    };
+    struct response_payload_args payload_args = {
+        .timespan_ns = bpf_ktime_get_ns() - state->timestamp_ns,
+        .hop = ip->saddr,
+    };
     // Remove the session from our table and respond to the original requestor.
     // Note: It is safe to access map elements after a delete call as execution
     // takes places under an RCU read lock.
     // Data associated with the deleted map entry will be reclaimed after
     // program execution ends.
-    ret = response_create(cursor, &session, state, &eth, &ip);
-    if (ret < 0)
+    if (response_create(cursor, &args, &payload_args, &eth, &ip) < 0)
         goto drop;
     return bpf_redirect(cursor->skb->ifindex, 0);
 
 // Jump here to allow the packet to proceed.
 pass:
-    return TC_ACT_OK;
+    return TC_ACT_UNSPEC;
 // Jump here to drop the packet.
 drop:
     return TC_ACT_SHOT;
@@ -192,10 +317,10 @@ drop:
  * Only handles IP packets addressed to this host.
  */
 SEC("tc")
-int prog(struct __sk_buff *skb)
+tc_action prog(struct __sk_buff *skb)
 {
     if (skb->pkt_type != PACKET_HOST)
-        return 0;
+        return TC_ACT_UNSPEC;
 
     struct cursor cursor;
     cursor_init(&cursor, skb);

@@ -65,12 +65,6 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "-y",
-        "--assume-yes",
-        action="store_true",
-        help="Skip confirmation prompts and run the program in batch mode.",
-    )
-    parser.add_argument(
         "-n",
         "--no-resolve",
         action="store_true",
@@ -114,11 +108,6 @@ def parse_arguments() -> argparse.Namespace:
         "--store-json",
         action="store_true",
         help="Store statistics as a json file.",
-    )
-    stats_group.add_argument(
-        "--transmit",
-        action="store_true",
-        help="Submit the statistics to HSA-Net for their measurement study.",
     )
 
     parser.add_argument(
@@ -181,6 +170,11 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "target", type=str, help="The traceroute target to traceroute to/from."
+    )
+    parser.add_argument(
+        "--forward-to",
+        type=str,
+        help="Only available in reverse-only direction. Asks the target server to trace towards the host specified by this argument.",
     )
 
     args = parser.parse_args()

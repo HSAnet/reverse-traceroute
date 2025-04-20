@@ -1,0 +1,115 @@
+= augsburg-traceroute-server(1)
+Valentin Heinrich
+:doctype: manpage
+:manmanual: AUGSBURG-TRACEROUTE-SERVER
+:mansource: AUGSBURG-TRACEROUTE-SERVER
+:man-linkstyle: pass:[blue R < >]
+
+== Name
+
+augsburg-traceroute-server - reverse-traceroute endpoint for augsburg-traceroute
+
+== Synposis
+
+*augsburg-traceroute-server-[v4|v6]* [*-t* timeout] [*-n* sessions] +
+    [*--indirect*=[yes|no]] [*--tcp-syn-probes*=[yes|no]] +
+    [*--allow-from*=<path>] [*--allow-indirect-from*=<path>] +
+    interface
+
+== Description
+
+The server attaches an _eBPF_ program to an interface.
+Ingress traffic on the interface will be processed by the program
+before reaching the kernel networking stack.
+This allows the server to process new _ICMP_ messages, on which augsburg-traceroute is built on,
+instead of triggering an unwanted response by the kernel.
+
+Multiple programs can be attached to the same interface,
+allowing you to run both the IPv4 and IPv6 versions of this software on the same interface.
+
+When a the server encounters a well-formed and valid request, a new session entry is created.
+Each session entry is stored as part of a map and divided into a session key and corresponding state.
+The session key contains the target address and the sessions global identifier.
+The session state contains the timestamp when the session was created, the client's address and the request's local identifier.
+
+Each reverse traceroute request issued by a client contains an identifier unique to the client.
+The server translates the local identifier into the global identifier unique to the server to remove ambiguity should multiple clients
+trace towards the same target with overlapping local identifiers.
+
+As the global identifier is limited to 16 bits, the maximum number of allowed sessions is currently limited to 65535.
+Should newer kernel versions become more common, this limitation can be lifted to 65535 sessions per target,
+with no global upper limit. But due to the current limited _eBPF_ functionality, this is not yet feasible.
+
+A probe with the requested protocol and flow is issued to the target, with the global identifier encoded inside the probe.
+When receiving a possible probe response, the global identifier is extracted and the associated session entry looked up.
+The server can then retrieve the stored timestamp created when issuing the corresponding probe and compute the round-trip-time (_RTT_).
+A response with the _RTT_ and the source address of the probe's response is then issued back to the client.
+The response's destination address and local identifier are copied from the associated state.
+
+Should no response be received for a session entry it is deleted after the configured timeout.
+
+The server uses fixed fields for traceroute probes to designate them as such.
+For _UDP_ and _TCP_ the source port 1021 (experimental) is used.
+For _ICMP_ the fixed sequence 0xFFFF serves this purpose.
+The server is able to figure out if a packet was issued as a response to a probe
+with said characteristics and does not pass the packet up to the kernel in that case.
+
+== Options
+
+*-t* <timeout>::
+    Set the session timeout in seconds.
+
+*-n* <sessions>::
+    Set the number of maximum allowed sessions.
+    When the session buffer is full new requests will be dropped.
+
+*--indirect*=[yes|no]::
+    Specify if a client is allowed to specify a traceroute target
+    other then himself.
+
+*--typ-syn-probes*=[yes|no]::
+    Specify if _TCP_ probes should have the _SYN_ flag set. +
+    While _SYN_ probes generally have a higher likelihood to reach their destination, +
+    some firewalls block repeated _SYN_ packets. +
+    In that case disabling _SYN_ probes might be desirable. +
+
+*--allow-from*=<path>::
+    The path to a file containing allowed networks in _CIDR_ notation. +
+    Only requests from client inside one of the specified networks are processed. +
+    If not explicitly specified this defaults to */etc/augsburg-traceroute-server/[v4|v6]/allowed.txt*. +
+    If no network entries are present in the file, requests from all addresses are allowed. +
+
+ *--allow-indirect-from*=<path>::
+    The path to a file containing networks in _CIDR_ notation inside which clients are allowed to specify a traceroute target. +
+    This option is ignored when the *--indirect* option is disabled. +
+    Only requests from client inside one of the specified networks are processed. +
+    Clients are matched against this list only after they passed the general whitelist. +
+    If not explicitly specified this defaults to */etc/augsburg-traceroute-server/[v4|v6]/allowed_indirect.txt*. +
+    If no network entries are present in the file, requests from all addresses are allowed.
+
+== Examples
+
+To run the server on the interface 'eth0' with default parameters:
+[example]
+augsburg-traceroute-server-v4 eth0
+
+To run the server with maximum 10.000 sessions and a session timeout of 5.5 seconds:
+[example]
+augsburg-traceroute-server-v4 -n 10000 -t 5.5 eth0
+
+To use TCP probes without the SYN flag set:
+[example]
+augsburg-traceroute-server-v4 --tcp-syn-probes=no eth0
+
+To allow clients requesting indirect traces to other targets:
+[example]
+augsburg-traceroute-server-v4 --indirect=yes eth0
+
+To specify a custom whitelist of networks from which request can be made:
+[example]
+augsburg-traceroute-server-v4 --allow-from=./my_networks.txt eth0
+
+== Exit status
+
+*0*: Success. +
+*1*: Failure.

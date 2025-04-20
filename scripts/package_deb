@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -e
+
+PACKAGE_DIR=$(realpath "${PACKAGE_DIR:-$(pwd)/package}")
+
+work_dir=$(mktemp -d)
+hook_dir=$(realpath "$(dirname "$0")")/hooks
+user=$(id -u -n)
+
+cp -r "$(pwd)" "$work_dir/sources"
+
+(
+	cd "$work_dir/sources"
+
+	version=$(dpkg-parsechangelog --show-field Version | cut -d '-' -f 1)
+	package=$(dpkg-parsechangelog --show-field Source)
+
+	debmake -yt
+	cd "../$package-$version"
+
+	sudo pbuilder update
+	sudo pdebuild --buildresult "$PACKAGE_DIR" -- --use-network yes --hookdir "$hook_dir"
+	sudo chown -R "$user:$user" "$PACKAGE_DIR"	
+)
+
+rm -f "$PACKAGE_DIR"/*_source.changes
+rm -rf "$work_dir"
+
+#debsign "$PACKAGE_DIR"/*.changes

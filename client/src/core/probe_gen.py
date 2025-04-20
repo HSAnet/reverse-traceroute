@@ -38,10 +38,11 @@ TracerouteResult = namedtuple("TracerouteResult", ["address", "rtt"])
 # This is the default outgoing source port for classic probes.
 TRACEROUTE_PORT = 33434
 
+
 class AbstractProbeGen:
-    def __init__(self, target: str, protocol: str):
-        self.is_ipv4 = isinstance(ip_address(target), IPv4Address)
-        self.target = str(target)
+    def __init__(self, endpoint: str, protocol: str):
+        self.is_ipv4 = isinstance(ip_address(endpoint), IPv4Address)
+        self.endpoint = str(endpoint)
         self.protocol = protocol
         self._probe_id = itertools.cycle(range(1, 0xFFFF + 1))
 
@@ -57,16 +58,16 @@ class AbstractProbeGen:
 class ClassicProbeGen(AbstractProbeGen):
     """Implements classic traceroute functionality."""
 
-    def __init__(self, target: str, protocol: str):
-        super().__init__(target, protocol)
+    def __init__(self, endpoint: str, protocol: str):
+        super().__init__(endpoint, protocol)
         self.chksum = in4_chksum if self.is_ipv4 else in6_chksum
 
     def create_probe(self, ttl: int, flow: int) -> Packet:
         probe_id = next(self._probe_id)
         ip = (
-            IP(dst=self.target, ttl=ttl)
+            IP(dst=self.endpoint, ttl=ttl)
             if self.is_ipv4
-            else IPv6(dst=self.target, hlim=ttl)
+            else IPv6(dst=self.endpoint, hlim=ttl)
         )
 
         if self.protocol == "icmp":
@@ -89,7 +90,9 @@ class ClassicProbeGen(AbstractProbeGen):
                 )
 
         elif self.protocol == "udp":
-            l3 = UDP(dport=flow, sport=TRACEROUTE_PORT, chksum=probe_id) / struct.pack("!H", 0)
+            l3 = UDP(dport=flow, sport=TRACEROUTE_PORT, chksum=probe_id) / struct.pack(
+                "!H", 0
+            )
             l3.load = struct.pack("!H", self.chksum(socket.IPPROTO_UDP, ip, bytes(l3)))
 
         elif self.protocol == "tcp":
@@ -108,38 +111,49 @@ class ClassicProbeGen(AbstractProbeGen):
 class ReverseProbeGen(AbstractProbeGen):
     """Implements reverse traceroute functionality."""
 
+    class NotSupportedException(Exception):
+        def __str__(self):
+            return "The endpoint does not support reverse traceroute"
+
     class Error(Exception):
         pass
 
-    class NotSupportedException(Error):
-        def __str__(self):
-            return "The target does not support reverse traceroute"
-
     class InvalidTtlException(Error):
         def __str__(self):
-            return "The target does not support the specified Time-To-Live (TTL)"
+            return "The endpoint does not support the specified Time-To-Live (TTL)"
 
     class InvalidFlowException(Error):
         def __str__(self):
-            return "The target does not support the specified flow. Try setting it to 0 to let the target choose a suitable value."
+            return "The endpoint does not support the specified flow. Try setting it to 0 to let the endpoint choose a suitable value."
 
     class InvalidProtocolException(Error):
         def __str__(self):
-            return "The target does not support the specified protocol. Try setting it to 0 to let the target choose a suitable value."
+            return "The endpoint does not support the specified protocol. Try setting it to 0 to let the endpoint choose a suitable value."
 
-    STATUS_TO_EXCEPTION = {
-        1: InvalidTtlException,
-        2: InvalidFlowException,
-        3: InvalidProtocolException,
-    }
+    class MultipartNotSupportedException(Error):
+        def __init__(self, class_type: int, class_num: int):
+            self.class_type = class_type
+            self.class_num=class_num
 
-    def __init__(self, target: str, protocol: str):
-        super().__init__(target, protocol)
+        def __str__(self):
+            return f"The endpoint does not support the requested extension ({self.class_type},{self.class_num})."
+        
+    class InsufficientPaddingException(Error):
+        def __init__(self, missing_bytes: int):
+            self.missing_bytes = missing_bytes
+
+        def __str__(self):
+            return f"The server requires {self.missing_bytes} more padding."
+
+    def __init__(self, endpoint: str, protocol: str, target: str | None, padding: int = 0):
+        super().__init__(endpoint, protocol)
         # Reuse identifiers which were answered by the server.
         # This reduces the number of entries to be maintained by a client-sided NAPT middlebox.
         # By using the last reclaimed identifier first (LIFO), we maximize the likelihood of
         # hitting an active NAPT entry, which eliminates the overhead to create a new one.
         self._reclaimed_identifiers = []
+        self.target = target
+        self.padding = padding
 
     def create_probe(self, ttl: int, flow: int) -> Packet:
         protocol = {
@@ -154,13 +168,35 @@ class ReverseProbeGen(AbstractProbeGen):
             else next(self._probe_id)
         )
         header = struct.pack("!BBH", ttl, protocol, flow)
+
+        if self.target or self.padding:
+            mp_header = struct.pack("!HH", 1 << 13, 0)
+
+            if self.target: 
+                mp_header += struct.pack("!HBB", 16, 5, 0)
+                if self.is_ipv4:
+                    mp_header += IPv6Address(f"::ffff:{self.target}").packed
+                else:
+                    mp_header += IPv6Address(self.target).packed
+                
+            if self.padding > 0:
+                if self.padding > 4:
+                    mp_header += struct.pack("!HBB", self.padding, 6, 0)
+                    mp_header += bytes(self.padding - 4)
+                else:
+                    mp_header += struct.pack("!HBB", 4, 6, 0)
+
+            mp_header = bytearray(mp_header)
+            struct.pack_into("!H", mp_header, 2, checksum(mp_header))
+            header += mp_header
+
         if self.is_ipv4:
             return (
-                IP(dst=self.target) / ICMP(type=8, code=1, id=probe_id, seq=0) / header
+                IP(dst=self.endpoint) / ICMP(type=8, code=1, id=probe_id, seq=0) / header
             )
         else:
             return (
-                IPv6(dst=self.target)
+                IPv6(dst=self.endpoint)
                 / ICMPv6EchoRequest(code=1, id=probe_id, seq=0)
                 / header
             )
@@ -168,6 +204,8 @@ class ReverseProbeGen(AbstractProbeGen):
     def parse_probe_response(
         self, request: Packet, response: Packet
     ) -> TracerouteResult:
+        all_bits_set = lambda n: n > 0 and (n & (n + 1)) == 0
+
         icmp = response.getlayer(1)
         response_type = 0 if self.is_ipv4 else 129
 
@@ -175,16 +213,26 @@ class ReverseProbeGen(AbstractProbeGen):
             self._reclaimed_identifiers.append(icmp.id)
             try:
                 load = icmp.load if self.is_ipv4 else icmp.data
-                status, _ = struct.unpack("BB", load[:2])
+                status, _, value = struct.unpack("!BBH", load[:4])
 
-                if status == 0x00:
-                    address, rtt = struct.unpack("!16sI", load[4:24])
-                    address = IPv6Address(address)
-                    if self.is_ipv4:
-                        address = address.ipv4_mapped
-                    return TracerouteResult(str(address), rtt / 1000000)
-                if status in self.STATUS_TO_EXCEPTION:
-                    raise self.STATUS_TO_EXCEPTION[status]
+                match status:
+                    case 0:
+                        address, rtt = struct.unpack("!16sI", load[4:24])
+                        address = IPv6Address(address)
+                        if address.ipv4_mapped:
+                            address = address.ipv4_mapped
+
+                        rtt = rtt / 1000000 if not all_bits_set(rtt) else None
+                        return TracerouteResult(str(address), rtt)
+                    case 1: raise self.InvalidTtlException()
+                    case 2: raise self.InvalidProtocolException()
+                    case 3: raise self.InvalidFlowException()
+                    case 4:
+                        class_type = value >> 8
+                        class_num = value & 0x00FF
+                        raise self.MultipartNotSupportedException(class_type, class_num)
+                    case 5:
+                        raise self.InsufficientPaddingException(value)
 
             # We receive this error when data cannot be unpacked due to a malformed response.
             # We assume a malformed response indicates the absence of a reverse traceroute server at the target.

@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef PROBE_H
-#define PROBE_H
+#ifndef BPF_PROBE_H
+#define BPF_PROBE_H
 
 #include "internal.h"
 #include "ip_generic.h"
@@ -27,7 +27,7 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 struct cursor;
 struct ethhdr;
 
-#define SOURCE_PORT bpf_htons(1021)
+#define SOURCE_PORT    bpf_htons(1021)
 #define ICMP_PROBE_SEQ 0xffff
 
 struct probe {
@@ -42,15 +42,10 @@ struct probe_args {
     struct probe probe;
 };
 
-typedef enum {
-    ERR_NONE = 0x00,
-    ERR_TTL = 0x01,
-    ERR_PROTO = 0x02,
-    ERR_FLOW = 0x03,
-} probe_error;
-
 INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
-                          struct ethhdr **eth, iphdr_t **ip);
-INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request);
+                          struct ethhdr **eth, iphdr_t **ip,
+                          const ipaddr_t *target);
+INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request,
+                         __u32 *const identifier);
 
 #endif

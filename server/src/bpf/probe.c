@@ -19,14 +19,25 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 
 #include "probe.h"
 #include "cursor.h"
+#include "config.h"
 #include "csum.h"
 #include "resize.h"
+#include "tr_error.h"
 #include "swap_addr.h"
 #include <linux/bpf.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/if_ether.h>
 #include <bpf/bpf_endian.h>
+
+union tcp_payload {
+    struct {
+        __u8 kind;
+        __u8 len;
+        __u16 value;
+    } mss_option;
+    __be32 data;
+};
 
 /*
  * Checks if the ICMP packet MAY be an answer to a probe.
@@ -36,7 +47,8 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
  * inside an ICMP error message, thus only the first eight bytes of the original
  * header are parsed.
  */
-static int probe_match_icmp(struct cursor *cursor, __u8 is_request)
+static int probe_match_icmp(struct cursor *cursor, __u8 is_request,
+                            __u32 *const identifier)
 {
     struct icmphdr *icmp;
 
@@ -46,14 +58,17 @@ static int probe_match_icmp(struct cursor *cursor, __u8 is_request)
         return -1;
 
     if (is_request) {
-        if (!(icmp->type == G_ICMP_ECHO_REQUEST && icmp->code == 0))
-            return -1;
+        if (icmp->type == G_ICMP_ECHO_REQUEST && icmp->code == 0)
+            goto ok;
     } else {
-        if (!(icmp->type == G_ICMP_ECHO_REPLY && icmp->code == 0))
-            return -1;
+        if (icmp->type == G_ICMP_ECHO_REPLY && icmp->code == 0)
+            goto ok;
     }
+    return -1;
 
-    return icmp->un.echo.id;
+ok:
+    *identifier = icmp->un.echo.id;
+    return 0;
 }
 
 /*
@@ -64,7 +79,8 @@ static int probe_match_icmp(struct cursor *cursor, __u8 is_request)
  * inside an ICMP error message, thus only the first eight bytes of the original
  * header are parsed.
  */
-static int probe_match_udp(struct cursor *cursor, __u8 is_request)
+static int probe_match_udp(struct cursor *cursor, __u8 is_request,
+                           __u32 *const identifier)
 {
     struct udphdr *udp;
     if (PARSE(cursor, &udp) < 0)
@@ -74,13 +90,11 @@ static int probe_match_udp(struct cursor *cursor, __u8 is_request)
     // as the identifier is encoded into the checksum.
     // A direct response from the target will most likely alter the
     // checksum of the response and render the identifier useless.
-    if (is_request) {
-        if (udp->source != SOURCE_PORT)
-            return -1;
-    } else
-        return -1;
-
-    return udp->check;
+    if (is_request && udp->source == SOURCE_PORT) {
+        *identifier = udp->check;
+        return 0;
+    }
+    return -1;
 }
 
 /*
@@ -91,27 +105,61 @@ static int probe_match_udp(struct cursor *cursor, __u8 is_request)
  * inside an ICMP error message, thus only the first eight bytes of the original
  * header are parsed.
  */
-static int probe_match_tcp(struct cursor *cursor, __u8 is_request)
+static int probe_match_tcp(struct cursor *cursor, __u8 is_request,
+                           __u32 *const identifier)
 {
     struct tcphdr *tcp;
 
     if (is_request) {
         if (PARSE(cursor, (__be64 **)&tcp) < 0)
             return -1;
-        if (tcp->source != SOURCE_PORT)
-            return -1;
 
-        return bpf_htonl(tcp->seq);
+        if (tcp->source == SOURCE_PORT) {
+            *identifier = bpf_htonl(tcp->seq);
+            return 0;
+        }
     } else {
         if (PARSE(cursor, &tcp) < 0)
             return -1;
         if (tcp->dest != SOURCE_PORT)
             return -1;
-        if (!tcp->rst && !(tcp->syn && tcp->ack))
-            return -1;
 
-        return bpf_ntohl(tcp->ack_seq) - 1;
+        // Make sure the ACK flag is set, as only in that
+        // case can we evaluate the ack-number, which contains our identifier.
+        // We expect only SYN or RST packets, depending on whether the port was
+        // open. Any other traffic can not created by traceroute probes. In
+        // order to parse the packet, the ACK flag MUST be present, otherwise
+        // the acknowledgement number carries no meaning.
+        // We rely on the ack-number to carry back the original sequence
+        if ((tcp->ack && tcp->rst) ||
+            (tcp->ack && CONFIG_TCP_SYN_ENABLED && tcp->syn)) {
+            *identifier = bpf_ntohl(tcp->ack_seq);
+            // An RST-ACK to a non-syn packet carries the previous sequence.
+            // An ACK packet triggered by a SYN carries the incremented
+            // sequence.
+            if (CONFIG_TCP_SYN_ENABLED)
+                *identifier -= 1;
+            else
+                *identifier -= sizeof(union tcp_payload);
+            return 0;
+        }
     }
+    return -1;
+}
+
+static tr_error probe_check_icmp(const struct probe *probe)
+{
+    return ERR_NONE;
+}
+
+static tr_error probe_check_udp(const struct probe *probe)
+{
+    return ERR_NONE;
+}
+
+static tr_error probe_check_tcp(const struct probe *probe)
+{
+    return ERR_NONE;
 }
 
 /*
@@ -119,16 +167,18 @@ static int probe_match_tcp(struct cursor *cursor, __u8 is_request)
  * identifier. Returns a negative value on failure, 0 on success and positive
  * values on an invalid configuration.
  */
-static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
-                                  struct ethhdr **eth, iphdr_t **ip)
+static int probe_set_icmp(struct cursor *cursor, struct probe *probe,
+                          struct ethhdr **eth, iphdr_t **ip)
 {
     struct icmphdr *icmp;
     union {
         __be32 i32[2];
         __be16 i16[4];
-    } *payload;
+    } * payload;
 
-    if (resize_l3hdr(cursor, sizeof(*icmp) + sizeof(*payload), eth, ip) < 0)
+    const __u16 payload_len = sizeof(*icmp) + sizeof(*payload);
+
+    if (resize_l3hdr(cursor, payload_len, eth, ip) < 0)
         return -1;
     if (PARSE(cursor, &icmp) < 0)
         return -1;
@@ -141,19 +191,14 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
     icmp->un.echo.id = probe->identifier;
     icmp->un.echo.sequence = ICMP_PROBE_SEQ;
 
-#if defined(TRACEROUTE_V4)
-    __be32 seed = 0;
-#elif defined(TRACEROUTE_V6)
-    __be32 seed =
-        pseudo_header(*ip, sizeof(*icmp) + sizeof(*payload), G_PROTO_ICMP);
-#endif
+    __be32 seed = G_ICMP_PSEUDOHDR(**ip, payload_len);
 
     payload->i32[0] = bpf_get_prandom_u32();
     payload->i32[1] = bpf_get_prandom_u32();
     payload->i16[3] = 0;
-    payload->i16[3] = csum(icmp, sizeof(*icmp) + sizeof(*payload), seed);
+    payload->i16[3] = csum(icmp, payload_len, seed);
 
-    return ERR_NONE;
+    return 0;
 }
 
 /*
@@ -161,36 +206,37 @@ static probe_error probe_set_icmp(struct cursor *cursor, struct probe *probe,
  * identifier. Returns a negative value on failure, 0 on success and positive
  * values on an invalid configuration.
  */
-static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
-                                 struct ethhdr **eth, iphdr_t **ip)
+static int probe_set_udp(struct cursor *cursor, struct probe *probe,
+                         struct ethhdr **eth, iphdr_t **ip)
 {
     struct udphdr *udp;
     __be32 pseudo_hdr;
     union {
         __be32 i32[2];
         __be16 i16[4];
-    } *payload;
+    } * payload;
 
-    if (resize_l3hdr(cursor, sizeof(*udp) + sizeof(*payload), eth, ip) < 0)
+    const __u16 payload_len = sizeof(*udp) + sizeof(*payload);
+
+    if (resize_l3hdr(cursor, payload_len, eth, ip) < 0)
         return -1;
     if (PARSE(cursor, &udp) < 0)
         return -1;
     if (PARSE(cursor, &payload) < 0)
         return -1;
 
-    pseudo_hdr =
-        pseudo_header(*ip, sizeof(*udp) + sizeof(*payload), IPPROTO_UDP);
+    pseudo_hdr = pseudo_header(*ip, payload_len, IPPROTO_UDP);
     udp->dest = probe->flow ? probe->flow : bpf_htons(53);
     udp->source = SOURCE_PORT;
     udp->check = probe->identifier;
-    udp->len = bpf_htons(sizeof(*udp) + sizeof(*payload));
+    udp->len = bpf_htons(payload_len);
 
     payload->i32[0] = bpf_get_prandom_u32();
     payload->i32[1] = bpf_get_prandom_u32();
     payload->i16[3] = 0;
-    payload->i16[3] = csum(udp, sizeof(*udp) + sizeof(*payload), pseudo_hdr);
+    payload->i16[3] = csum(udp, payload_len, pseudo_hdr);
 
-    return ERR_NONE;
+    return 0;
 }
 
 /*
@@ -198,26 +244,23 @@ static probe_error probe_set_udp(struct cursor *cursor, struct probe *probe,
  * identifier. Returns a negative value on failure, 0 on success and positive
  * values on an invalid configuration.
  */
-static probe_error probe_set_tcp(struct cursor *cursor, struct probe *probe,
-                                 struct ethhdr **eth, iphdr_t **ip)
+static int probe_set_tcp(struct cursor *cursor, struct probe *probe,
+                         struct ethhdr **eth, iphdr_t **ip)
 {
     struct tcphdr *tcp;
-    struct {
-        __u8 kind;
-        __u8 len;
-        __u16 value;
-    } * mss_option;
     __be32 pseudo_hdr;
+    union tcp_payload *payload;
 
-    if (resize_l3hdr(cursor, sizeof(*tcp) + sizeof(*mss_option), eth, ip) < 0)
+    const __u16 payload_len = sizeof(*tcp) + sizeof(*payload);
+
+    if (resize_l3hdr(cursor, payload_len, eth, ip) < 0)
         return -1;
     if (PARSE(cursor, &tcp) < 0)
         return -1;
-    if (PARSE(cursor, &mss_option) < 0)
+    if (PARSE(cursor, &payload) < 0)
         return -1;
 
-    pseudo_hdr =
-        pseudo_header(*ip, sizeof(*tcp) + sizeof(*mss_option), IPPROTO_TCP);
+    pseudo_hdr = pseudo_header(*ip, payload_len, IPPROTO_TCP);
     // Zero out tcp fields.
     *((__be32 *)tcp + 1) = 0;
     *((__be32 *)tcp + 2) = 0;
@@ -227,36 +270,58 @@ static probe_error probe_set_tcp(struct cursor *cursor, struct probe *probe,
     tcp->dest = probe->flow ? probe->flow : bpf_htons(80);
     tcp->source = SOURCE_PORT;
     tcp->seq = bpf_htonl(probe->identifier);
-
-    tcp->syn = 1;
-    tcp->doff = 6;
-
     tcp->window = bpf_htons(1024);
 
-    mss_option->kind = 2;
-    mss_option->len = 4;
-    mss_option->value = bpf_htons(1460);
+    if (CONFIG_TCP_SYN_ENABLED) {
+        tcp->syn = 1;
+        tcp->doff = 6;
+        payload->mss_option.kind = 2;
+        payload->mss_option.len = 4;
+        payload->mss_option.value = bpf_htons(1460);
+    } else {
+        tcp->doff = 5;
+        payload->data = bpf_get_prandom_u32();
+    }
 
     tcp->check = 0;
-    tcp->check = csum(tcp, sizeof(*tcp) + sizeof(*mss_option), pseudo_hdr);
+    tcp->check = csum(tcp, payload_len, pseudo_hdr);
+
+    return 0;
+}
+
+static tr_error probe_check(const struct probe_args *args)
+{
+    if (args->ttl == 0)
+        return ERR_TTL;
+
+    switch (args->proto) {
+    case G_PROTO_ICMP:
+        return probe_check_icmp(&args->probe);
+    case IPPROTO_UDP:
+        return probe_check_udp(&args->probe);
+    case IPPROTO_TCP:
+        return probe_check_tcp(&args->probe);
+    default:
+        return ERR_PROTO;
+    }
 
     return ERR_NONE;
 }
-
 /*
  * Attempts to match a packet as a possible probe response.
  * Returns a negative value on no match and a positive value for the possible
  * probe identifier.
  */
-INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request)
+INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request,
+                         __u32 *const identifier)
 {
     switch (proto) {
     case IPPROTO_TCP:
-        return probe_match_tcp(cursor, is_request);
+        return probe_match_tcp(cursor, is_request, identifier);
     case IPPROTO_UDP:
-        return probe_match_udp(cursor, is_request);
+        return probe_match_udp(cursor, is_request, identifier);
     case G_PROTO_ICMP:
-        return probe_match_icmp(cursor, is_request);
+        return probe_match_icmp(cursor, is_request, identifier);
     default:
         return -1;
     }
@@ -268,18 +333,25 @@ INTERNAL int probe_match(struct cursor *cursor, __u8 proto, __u8 is_request)
  * positive value on an invalid probe configuration.
  */
 INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
-                          struct ethhdr **eth, iphdr_t **ip)
+                          struct ethhdr **eth, iphdr_t **ip,
+                          const ipaddr_t *target)
 {
     int ret;
     struct probe *probe = &args->probe;
 
-    if (args->ttl == 0)
-        return ERR_TTL;
+    // Set the default protocol if not specified (proto == 0).
     if (args->proto == 0)
         args->proto = G_PROTO_ICMP;
 
+    if ((ret = probe_check(args)) != ERR_NONE)
+        return ret;
+
+    // Swap addresses.
+    swap_addr(*eth, *ip, target);
+    G_IP_NEXTHDR(**ip) = args->proto;
+    G_IP_TTL(**ip) = args->ttl;
+
     switch (args->proto) {
-    // In case of 0 we MUST use a suitable default value.
     case G_PROTO_ICMP:
         ret = probe_set_icmp(cursor, probe, eth, ip);
         break;
@@ -290,24 +362,15 @@ INTERNAL int probe_create(struct cursor *cursor, struct probe_args *args,
         ret = probe_set_tcp(cursor, probe, eth, ip);
         break;
     default:
-        ret = ERR_PROTO;
+        // Should already be handled by probe_check(...)
+        return ERR_PROTO;
     }
 
-    if (ret != ERR_NONE)
+    if (ret < 0)
         return ret;
 
-#if defined(TRACEROUTE_V4)
-    (**ip).protocol = args->proto;
-    (**ip).ttl = args->ttl;
-    (**ip).check = 0;
-    (**ip).check = csum(*ip, sizeof(**ip), 0);
-#elif defined(TRACEROUTE_V6)
-    (**ip).nexthdr = args->proto;
-    (**ip).hop_limit = args->ttl;
-#endif
-    // Swap addresses.
-    swap_addr(*eth, *ip);
-
-    // Packet is ready to be sent.
-    return ERR_NONE;
+    // Compute the checksum after setting the probe,
+    // as the the packet is resized in the process (changing the ip->len field).
+    G_IP_CSUM_COMPUTE(**ip);
+    return 0;
 }

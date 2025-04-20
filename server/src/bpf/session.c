@@ -25,17 +25,11 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 #include <bpf/bpf_helpers.h>
 #include <asm-generic/errno-base.h>
 
-// This variable may be overwritten by the program loader.
-// We declare it as volatile so the compiler won´t optimize it away,
-// e.g. inline the constant value into instructions.
-volatile const __u64 TIMEOUT_NS = DEFAULT_TIMEOUT_NS;
-
 // The internally used state consists of the usual state and a timer.
 // The timer should not be exposed as part of the regular state.
 struct __session_state {
-    struct session_state state;
-    __u16 padding;
     struct bpf_timer timer;
+    struct session_state state;
 };
 
 // Dictionary of sessions and associated times.
@@ -44,7 +38,25 @@ struct {
     __uint(max_entries, DEFAULT_MAX_ELEM);
     __type(key, struct session_key);
     __type(value, struct __session_state);
-} map_sessions SEC(".maps");
+} sessions SEC(".maps");
+
+// Contains currently usable session ids, at start
+// populated by userspace.
+struct {
+    __uint(type, BPF_MAP_TYPE_QUEUE);
+    __uint(max_entries, DEFAULT_MAX_ELEM);
+    __type(value, __u16);
+} session_ids SEC(".maps");
+
+static int session_delete(const struct session_key *key)
+{
+    if (bpf_map_delete_elem(&sessions, key) == 0) {
+        session_return_id(key->identifier);
+        log_message(SESSION_DELETED, key);
+        return 0;
+    }
+    return -1;
+}
 
 static int session_timeout_callback(void *map, const struct session_key *key,
                                     struct __session_state *state)
@@ -56,21 +68,17 @@ static int session_timeout_callback(void *map, const struct session_key *key,
 
 static struct __session_state *__session_find(const struct session_key *key)
 {
-    return bpf_map_lookup_elem(&map_sessions, key);
+    return bpf_map_lookup_elem(&sessions, key);
 }
 
-INTERNAL int session_delete(const struct session_key *session)
-{
-    log_message(SESSION_DELETED, session);
-    return bpf_map_delete_elem(&map_sessions, session);
-}
-
-INTERNAL struct session_state *session_find(const struct session_key *key)
+INTERNAL struct session_state *
+session_find_delete(const struct session_key *key)
 {
     struct __session_state *__state = __session_find(key);
 
-    if (!__state)
+    if (!__state || session_delete(key) < 0)
         return NULL;
+
     return &__state->state;
 }
 
@@ -78,19 +86,28 @@ INTERNAL int session_add(const struct session_key *session,
                          const struct session_state *state)
 {
     int ret;
-    struct __session_state __state = {.state = *state, .padding = 0},
-                           *state_ptr;
+    struct __session_state __state = {.state = *state}, *state_ptr;
 
-    ret = bpf_map_update_elem(&map_sessions, session, &__state, BPF_NOEXIST);
-    if (ret) {
-        switch (ret) {
-        case -EEXIST:
-            log_message(SESSION_EXISTS, session);
-            break;
-        case -E2BIG:
-            log_message(SESSION_BUFFER_FULL, session);
-            break;
+    ret = bpf_map_update_elem(&sessions, session, &__state, BPF_NOEXIST);
+    if (ret < 0) {
+        // These conditions below will not be met as the pop operation
+        // on the session_ids will return an error before we get here.
+        // This code will become relevant once we return to a target-specific
+        // ID mapping with bpf_loop.
+
+        /*
+        switch(-ret) {
+            case EEXIST:
+                // We get here in a race condition
+                // between session lookup and update
+                // Return a code that indicates said condition, caller can then
+                // loop until a session is found. break; case E2BIG:
+            case E2BIG:
+                log_message(SESSION_BUFFER_FULL, session);
+                break;
         }
+        */
+
         goto err;
     }
 
@@ -98,11 +115,11 @@ INTERNAL int session_add(const struct session_key *session,
     if (!state_ptr)
         goto err;
 
-    if (bpf_timer_init(&state_ptr->timer, &map_sessions, CLOCK_MONOTONIC) < 0)
+    if (bpf_timer_init(&state_ptr->timer, &sessions, CLOCK_MONOTONIC) < 0)
         goto err;
     if (bpf_timer_set_callback(&state_ptr->timer, session_timeout_callback) < 0)
         goto err;
-    if (bpf_timer_start(&state_ptr->timer, TIMEOUT_NS, 0) < 0)
+    if (bpf_timer_start(&state_ptr->timer, CONFIG_TIMEOUT_NS, 0) < 0)
         goto err;
 
     log_message(SESSION_CREATED, session);
@@ -110,4 +127,23 @@ INTERNAL int session_add(const struct session_key *session,
 
 err:
     return -1;
+}
+
+INTERNAL int session_find_target_id(const ipaddr_t *target, __u16 *out_id)
+{
+    if (bpf_map_pop_elem(&session_ids, out_id) < 0) {
+        struct session_key key = SESSION_NEW_KEY(*target, NONE_ID);
+        log_message(SESSION_ID_POP, &key);
+        return -1;
+    }
+    return 0;
+}
+
+INTERNAL void session_return_id(__u16 id)
+{
+    if (bpf_map_push_elem(&session_ids, &id, 0) < 0) {
+        ipaddr_t addr = NONE_ADDR;
+        struct session_key key = SESSION_NEW_KEY(addr, id);
+        log_message(SESSION_ID_PUSH, &key);
+    }
 }

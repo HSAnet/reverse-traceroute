@@ -17,11 +17,12 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef PROTO_H
-#define PROTO_H
+#ifndef BPF_PROTO_H
+#define BPF_PROTO_H
 
 #include <linux/ipv6.h>
 #include <linux/types.h>
+#include <asm/byteorder.h>
 
 union trhdr {
     struct {
@@ -32,7 +33,7 @@ union trhdr {
     struct {
         __u8 state;
         __u8 err_msg_len;
-        __be16 reserved;
+        __be16 data;
     } response;
 } __attribute__((packed));
 

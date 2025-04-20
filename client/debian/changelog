@@ -1,0 +1,5 @@
+augsburg-traceroute-client (0.1.0-0) jammy noble; urgency=low
+
+  * Initial release.
+
+ -- Valentin Heinrich <valentin.heinrich@hs-augsburg.de>  Tue, 24 Oct 2023 12:01:50 +0200

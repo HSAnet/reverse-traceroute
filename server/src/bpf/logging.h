@@ -17,10 +17,10 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef LOGGING_H
-#define LOGGING_H
+#ifndef BPF_LOGGING_H
+#define BPF_LOGGING_H
 
-#include "../messages.h"
+#include "messages.h"
 #include "internal.h"
 
 struct session_key;

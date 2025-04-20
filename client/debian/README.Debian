@@ -1,0 +1,8 @@
+Augsburg-Traceroute for Debian
+
+This package provides the client for augsburg-traceroute,
+an ICMP-level distributed reverse-traceroute solution.
+The client is capable of performing multi- and singlepath traces
+in both the forward and reverse direction.
+
+ -- valentin <valentin.heinrich@hs-augsburg.de>  Tue, 24 Oct 2023 00:14:39 +0200

@@ -1,0 +1,13 @@
+Files:
+ *
+Copyright: 2022-2023 University of Applied Sciences Augsburg
+License: GPL-3
+
+Files:
+ src/lib/libbpf/*
+Copyright: 2015 The Libbpf Authors
+License: LGPL-2.1 or BSD-2-clause
+
+Files:
+ src/lib/bpftool/*
+License: GPL-2 or BSD-2-clause

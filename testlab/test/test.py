@@ -17,6 +17,9 @@ If not, see <https://www.gnu.org/licenses/>.
 
 import time
 import sys
+import os
+import shutil
+from pathlib import Path
 from signal import SIGINT
 from configparser import ConfigParser
 from ipmininet.iptopo import IPTopo
@@ -25,7 +28,6 @@ from ipmininet.cli import IPCLI
 
 
 class DiamondTopo(IPTopo):
-
     def build(self, *args, **kwargs):
         x1, x2, u1, u2, l1, l2, l3 = self.addRouters("x1", "x2", "u1", "u2", "l1", "l2", "l3")
         client = self.addHost("client")
@@ -55,37 +57,42 @@ class DiamondTopo(IPTopo):
 
 
 if __name__ == "__main__":
-    assert len(sys.argv) == 2
-    cfg_path = sys.argv[1]
-
-    cfg_parser = ConfigParser()
-    cfg_parser.read(cfg_path)
-
-    cfg = cfg_parser["TESTLAB"]
-
-    client = cfg["client"]
-    server_v4 = cfg["server_v4"]
-    server_v6 = cfg["server_v6"]
-
     net = IPNet(topo=DiamondTopo())
     try:
+        print("Starting integration tests")
         net.start()
 
-        popen_v4 = net["server"].popen(server_v4, "server-eth0")
-        popen_v6 = net["server"].popen(server_v6, "server-eth0")
-
-        print("Waiting 30 seconds for routes to converge..")
+        print("Waiting 30 seconds for routes to converge")
         time.sleep(30)
 
-        for af in ["4","6"]:
-            for proto in ["udp", "tcp", "icmp"]:
-                print(f"Running test with IPv{af} and protocol {proto}")
-                popen_pcap = net["server"].popen("tcpdump", "-i", "server-eth0", "-w", f"{proto}_{af}.pcap")
-                net["client"].cmd(f"{client} -o {proto}_{af} -{af} two-way {proto} multipath server")
-                popen_pcap.send_signal(SIGINT)
-                time.sleep(0.5)
+        RESULT_DIR = Path("/results")
 
-        popen_v4.send_signal(SIGINT)
-        popen_v6.send_signal(SIGINT)
+        for af in ("4", "6"):
+            for proto in ("tcp", "udp", "icmp"):
+                print(f"Running test with proto {proto} for IPv{af}")
+
+                path = RESULT_DIR / f"{proto}-v{af}"
+                os.mkdir(path)
+
+                server_log = open(path / "server.txt", "w")
+                server = net["server"].popen(f"augsburg-traceroute-server-v{af}", "server-eth0", stdout=server_log, stderr=server_log)
+                server_pcap = net["server"].popen(f"tcpdump -w {path / 'server.pcap'}")
+
+                try:
+                    client_trace = path / "trace.pdf"
+                    client_log = open(path / "client.txt", "w")
+                    client_pcap = net["server"].popen(f"tcpdump -w {path / 'client.pcap'}")
+                    client = net["client"].popen(f"augsburg-traceroute -{af} -o {client_trace} two-way {proto} multipath server", stdout=client_log, stderr=client_log)
+                    try:
+                        client.wait()
+                    finally:
+                        client_pcap.terminate()
+                        client_log.close()
+
+                finally:
+                    server.terminate()
+                    server_pcap.terminate()
+                    server_log.close()
+
     finally:
         net.stop()

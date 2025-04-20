@@ -17,10 +17,11 @@ You should have received a copy of the GNU General Public License along with
 Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef BPF_CONFIG_H
+#define BPF_CONFIG_H
 
 #include <linux/types.h>
+#include <stdbool.h>
 
 // The default value for the maximum session entries if not overridden by the
 // loader
@@ -29,7 +30,15 @@ Augsburg-Traceroute. If not, see <https://www.gnu.org/licenses/>.
 // The default value for the session entry timeout if not overridden by the
 // loader
 #define DEFAULT_TIMEOUT_NS 5000000000
+extern volatile const __u64 CONFIG_TIMEOUT_NS;
 
-extern volatile const __u64 TIMEOUT_NS;
+#define DEFAULT_INDIRECT_TRACE_ENABLED false
+extern volatile const bool CONFIG_INDIRECT_TRACE_ENABLED;
+
+#define DEFAULT_TCP_SYN_ENABLED true
+extern volatile const bool CONFIG_TCP_SYN_ENABLED;
+
+#define DEFAULT_MIN_REQUEST_LEN 200
+extern volatile const __u16 CONFIG_MIN_REQUEST_LEN;
 
 #endif

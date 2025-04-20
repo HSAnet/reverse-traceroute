@@ -60,11 +60,11 @@ class AbstractEngine:
 
     def discover(
         self,
-        probe_generator: AbstractProbeGen,
         min_ttl: int,
         max_ttl: int,
+        probe_generator: AbstractProbeGen,
         first_hop: str,
-        target: str = None,
+        target: (str | None) = None,
     ) -> TracerouteVertex:
         """The main discovery logic of the traceroute engines.
         It proceeds until the target is hit (if defined) or successive identical
@@ -73,7 +73,6 @@ class AbstractEngine:
         assert min_ttl > 0 and max_ttl >= min_ttl
 
         root = TracerouteVertex(first_hop)
-        addresses = lambda hop: set(v.address for v in hop)
         hop = TracerouteHop(0, [root])
 
         unresponsive = 0
